@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69,<76"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ur_dashboard_to_opcua_gateway"
+version = "1.1.0"
+description = "Expose UR programs through OPC UA"
+readme = {text = "ur_dashboard_to_opcua_gateway", content-type = "text/markdown"}
+requires-python = ">=3.8.3"
+dependencies = [
+    "asyncua==1.1.5; python_version < '3.10'",
+    "asyncua==2.0.1; python_version >= '3.10'",
+]
+
+[project.optional-dependencies]
+sftp = [
+    "paramiko>=3.5,<4",
+]
+test = [
+    "pytest>=8,<9",
+]
+system-test = [
+    "docker>=7,<8; python_version >= '3.10'",
+    "paramiko>=3.5,<4; python_version >= '3.10'",
+    "pytest>=8,<10; python_version >= '3.10'",
+    "testcontainers==4.14.2; python_version >= '3.10'",
+]
+format = [
+    "black>=24,<25",
+    "mdformat>=0.7,<1",
+    "mdformat-gfm>=0.3,<1",
+]
+
+[project.scripts]
+ur_dashboard_to_opcua_gateway = "ur_dashboard_to_opcua_gateway._01_main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 160
+target-version = ["py38"]
+skip-magic-trailing-comma = true

@@ -1,0 +1,7 @@
+Port 22
+PermitRootLogin yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+UsePAM no
+PrintMotd no
+Subsystem sftp internal-sftp

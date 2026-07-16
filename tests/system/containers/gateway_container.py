@@ -8,7 +8,7 @@ import asyncua.sync
 import testcontainers.core.container as tc_container
 import testcontainers.core.network as tc_network
 
-import tests.waiting as waiting
+import tests.support.waiting as waiting
 
 OPCUA_PORT = 4840
 OPCUA_PATH = "/ur20/"

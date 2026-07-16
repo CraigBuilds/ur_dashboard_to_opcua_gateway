@@ -9,7 +9,7 @@ import testcontainers.core.container as tc_container
 import testcontainers.core.network as tc_network
 import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as control_ur_programs_via_dashboard
 
-import tests.waiting as waiting
+import tests.support.waiting as waiting
 
 URSIM_IMAGE = "universalrobots/ursim_e-series:5.25.2"
 URSIM_PROGRAMS = "/ursim/programs.UR20"

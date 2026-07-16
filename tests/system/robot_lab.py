@@ -8,9 +8,9 @@ import uuid
 import testcontainers.core.image as tc_image
 import testcontainers.core.network as tc_network
 
-import tests.containers.gateway_container as gateway_container
-import tests.containers.openssh_container as openssh_container
-import tests.containers.ursim_container as ursim_container
+import tests.system.containers.gateway_container as gateway_container
+import tests.system.containers.openssh_container as openssh_container
+import tests.system.containers.ursim_container as ursim_container
 
 
 class RobotLab:
@@ -19,7 +19,7 @@ class RobotLab:
     def __init__(self, programs: pathlib.Path) -> None:
         """Configure paths and service state."""
         self.programs = programs
-        self.repository = pathlib.Path(__file__).resolve().parents[1]
+        self.repository = pathlib.Path(__file__).resolve().parents[2]
         self.project = self.repository / "code"
         self._stack = contextlib.ExitStack()
         self.ursim: ursim_container.UrSimContainer
@@ -34,7 +34,7 @@ class RobotLab:
         gateway_tag = f"ur_dashboard_to_opcua_gateway_test:{suffix}"
         gateway_context = tc_image.DockerImage(self.project, tag=gateway_tag, clean_up=True)
         gateway_image = self._stack.enter_context(gateway_context)
-        ssh_context_path = self.repository / "tests" / "docker" / "openssh"
+        ssh_context_path = self.repository / "tests" / "system" / "docker" / "openssh"
         ssh_tag = f"ur-program-openssh-test:{suffix}"
         ssh_context = tc_image.DockerImage(ssh_context_path, tag=ssh_tag, clean_up=True)
         ssh_image = self._stack.enter_context(ssh_context)

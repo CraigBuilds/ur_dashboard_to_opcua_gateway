@@ -1,6 +1,6 @@
 """Test gateway protocol, validation, command, and lifecycle behaviour in isolation.
 
-These tests complement ``test_unit`` by exercising important failure branches and
+These tests complement ``test_components`` by exercising important failure branches and
 adapter boundaries with deterministic fakes. They do not require Docker, a robot,
 an SSH server, an OPC UA client, or any external network connection.
 """
@@ -22,8 +22,8 @@ import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as co
 import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
 import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
 
-import tests.program_fixture as program_fixture
-import tests.run_system_tests as run_system_tests
+import tests.support.program_fixture as program_fixture
+import tests.system.run as run_system_tests
 
 
 def test_sftp_args_require_robot_host(capsys: pytest.CaptureFixture[str]) -> None:

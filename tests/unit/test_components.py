@@ -17,7 +17,7 @@ import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as co
 import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
 import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
 
-import tests.program_fixture as program_fixture
+import tests.support.program_fixture as program_fixture
 
 
 def test_local_catalogue(tmp_path: pathlib.Path) -> None:

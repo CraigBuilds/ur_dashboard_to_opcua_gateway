@@ -1,4 +1,4 @@
-"""Provide bounded polling for asynchronous container readiness."""
+"""Provide bounded polling for asynchronous system-test service readiness."""
 
 import time
 import typing

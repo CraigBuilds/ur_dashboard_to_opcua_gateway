@@ -1,5 +1,17 @@
 # Testing
 
+## Test types
+
+The executable tests are organized by scope:
+
+- `tests/architecture/` statically enforces repository and API conventions.
+- `tests/unit/` exercises components and behavior in isolation with deterministic fakes.
+- `tests/system/` verifies the complete gateway with real URSim, OpenSSH, gateway, and OPC UA containers.
+
+`tests/support/` contains shared fixtures and utilities; it is support code, not a separate test type. The system suite currently provides both integration and
+end-to-end coverage, so there is no separate integration-test folder. See [the test-suite README](../tests/README.md) for the complete layout and focused
+commands.
+
 ## Commands
 
 Install the Python 3.8-compatible unit-test and formatting dependencies from the repository root:
@@ -7,6 +19,9 @@ Install the Python 3.8-compatible unit-test and formatting dependencies from the
 ```bash
 python -m pip install -e "./code[test,format]"
 ```
+
+The unit suite uses deterministic transport fakes and does not require the optional SFTP dependency. Install `./code[sftp,test,format]` when developing or
+manually exercising the SFTP catalogue as well.
 
 Run the non-container suite:
 
@@ -35,7 +50,7 @@ python -m pytest -c tests/pytest.ini -m system
 The preferred one-command route is:
 
 ```bash
-python tests/run_system_tests.py
+python tests/system/run.py
 ```
 
 The runner:
@@ -50,26 +65,26 @@ The runner:
 If the runner is started with an older Python and cannot find a newer interpreter automatically, provide one explicitly:
 
 ```bash
-python tests/run_system_tests.py --python "/path/to/python3.12"
+python tests/system/run.py --python "/path/to/python3.12"
 ```
 
 Select one catalogue path:
 
 ```bash
-python tests/run_system_tests.py --catalog local
-python tests/run_system_tests.py --catalog sftp
+python tests/system/run.py --catalog local
+python tests/system/run.py --catalog sftp
 ```
 
 Install dependencies and verify test collection without Docker:
 
 ```bash
-python tests/run_system_tests.py --collect-only
+python tests/system/run.py --collect-only
 ```
 
 Use `--skip-install` to reuse the prepared environment without asking pip to check dependencies, or `--no-pull` to let Testcontainers pull URSim when needed.
 Additional pytest arguments can be placed after `--`.
 
-## Unit coverage
+## Architecture and unit coverage
 
 The non-container tests cover:
 
@@ -81,10 +96,8 @@ The non-container tests cover:
 - OPC UA method argument metadata, array return metadata, folder caching, namespace creation, endpoint configuration, and adapter wiring.
 - Deterministic, reproducible, readable no-motion URP fixture generation.
 - Reusable system-test runner interpreter validation, catalogue selection, collect-only mode, and pytest argument forwarding.
-- Required top-level docstrings for production and test modules.
-- The module namespace import convention.
-- Explicit consumer documentation for public functions, classes, and methods.
-- The rule that production classes are reserved for dataclasses.
+- Architecture checks for required top-level docstrings, parser help messages, namespace imports, documented public consumers, and dataclass-only production
+  classes.
 
 The reliability and security cases listed in [planned features](features.md#planned-features) are intentionally deferred.
 
@@ -128,10 +141,10 @@ support those Python versions.
 
 ```bash
 python -m black --config code/pyproject.toml --check code/src tests
-python -m mdformat --check --wrap 160 README.md docs
+python -m mdformat --check --wrap 160 README.md AGENTS.md docs tests/README.md
 ```
 
 ## CI
 
-GitHub Actions runs unit tests and checks the installed command on Python 3.8.3 and 3.12. A Python 3.8.3 quality job checks Python and Markdown formatting,
-while a separate Python 3.12 job runs the Docker-backed system suite.
+GitHub Actions runs architecture and unit tests and checks the installed command on Python 3.8.3 and 3.12. A Python 3.8.3 quality job checks Python formatting
+plus all maintained Markdown documentation, including `AGENTS.md` and `tests/README.md`, while a separate Python 3.12 job runs the Docker-backed system suite.

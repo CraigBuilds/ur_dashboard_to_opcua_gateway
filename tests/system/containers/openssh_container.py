@@ -8,7 +8,7 @@ import paramiko
 import testcontainers.core.container as tc_container
 import testcontainers.core.network as tc_network
 
-import tests.waiting as waiting
+import tests.support.waiting as waiting
 
 SFTP_PORT = 22
 SFTP_USERNAME = "root"

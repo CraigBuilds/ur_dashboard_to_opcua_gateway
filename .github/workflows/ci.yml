@@ -28,7 +28,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e "./code[test]"
 
-      - name: Run unit tests
+      - name: Run architecture and unit tests
         run: python -m pytest -c tests/pytest.ini -m "not system"
 
       - name: Check command
@@ -54,7 +54,7 @@ jobs:
       - name: Check formatting
         run: |
           python -m black --config code/pyproject.toml --check code/src tests
-          python -m mdformat --check --wrap 160 README.md docs
+          python -m mdformat --check --wrap 160 README.md AGENTS.md docs tests/README.md
 
   system:
     runs-on: ubuntu-latest

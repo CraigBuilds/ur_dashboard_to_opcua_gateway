@@ -39,11 +39,14 @@ See [features](docs/features.md) for current limitations and planned additions.
 ## Repository
 
 ```text
-README.md
-.github/   GitHub Actions CI
-code/      Python package and gateway Dockerfile
-docs/      Architecture, features, and testing documentation
-tests/     Unit tests, system tests, and test containers
+.gitattributes  Cross-platform line-ending policy
+.github/        GitHub Actions CI
+.gitignore      Repository-wide generated-file exclusions
+AGENTS.md       Persistent Codex and Git workflow guidance
+README.md       Project overview and common commands
+code/           Python package and gateway Dockerfile
+docs/           Architecture, features, and testing documentation
+tests/          Architecture, unit, and Docker-backed system test suites
 ```
 
 The source modules are numbered in their intended reading order:
@@ -72,15 +75,15 @@ Install SFTP support:
 python -m pip install "./code[sftp]"
 ```
 
-Install a development environment:
+Install all current runtime features plus the unit-test and formatting tools for development:
 
 ```bash
-python -m pip install -e "./code[test,format]"
+python -m pip install -e "./code[sftp,test,format]"
 ```
 
 Python 3.8.3 or later is supported. Python 3.8 and 3.9 install `asyncua` 1.1.5, while Python 3.10 and later install `asyncua` 2.0.1.
 
-The Docker image continues to use Python 3.12.
+Paramiko is an optional dependency and is imported only when SFTP discovery is used. The Docker image installs SFTP support and uses Python 3.12.
 
 ## Run
 
@@ -90,7 +93,7 @@ Use a local or mounted programs directory:
 ur_dashboard_to_opcua_gateway --catalog local
 ```
 
-Defaults:
+Local-catalogue defaults:
 
 ```text
 Programs folder: /programs
@@ -111,9 +114,20 @@ ur_dashboard_to_opcua_gateway \
 
 If `UR_ROBOT_PASSWORD` is absent, the command prompts for the password. Use `--dashboard-host` when the Dashboard Server is at a different address.
 
+SFTP-catalogue defaults:
+
+```text
+Programs folder: /programs
+SFTP port:       22
+SFTP username:   root
+Dashboard host:  the value supplied to --robot-host
+Dashboard port:  29999
+OPC UA endpoint: opc.tcp://0.0.0.0:4840/ur20/
+```
+
 ## Docker
 
-Build from the `code` directory:
+Build from the repository root, using `code/` as the Docker build context:
 
 ```bash
 docker build -t ur_dashboard_to_opcua_gateway code
@@ -150,13 +164,13 @@ python -m pytest -c tests/pytest.ini
 Or let the system-test runner prepare an isolated environment, check Docker, pull URSim, and run both real catalogue paths:
 
 ```bash
-python tests/run_system_tests.py
+python tests/system/run.py
 ```
 
 When starting the runner with an older Python, select a Python 3.10 or later executable explicitly:
 
 ```bash
-python tests/run_system_tests.py --python "/path/to/python3.12"
+python tests/system/run.py --python "/path/to/python3.12"
 ```
 
 The system tests require Python 3.10 or later, Docker, and a Linux `amd64` environment for the pinned URSim image. See [testing](docs/testing.md) for details.
@@ -167,7 +181,7 @@ The repository uses a 160-column limit:
 
 ```bash
 python -m black --config code/pyproject.toml code/src tests
-python -m mdformat --wrap 160 README.md docs
+python -m mdformat --wrap 160 README.md AGENTS.md docs tests/README.md
 ```
 
 ## Security

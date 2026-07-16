@@ -63,7 +63,7 @@ def _validate_command(command: str) -> None:
 def send_command(host: str, port: int, command: str, timeout: float = _DASHBOARD_TIMEOUT) -> str:
     """Send one command to a UR Dashboard Server.
 
-    Used by command functions in this module and ``tests.containers.ursim_container``.
+    Used by command functions in this module and ``tests.system.containers.ursim_container``.
     """
     _validate_command(command)
     address = (host, port)

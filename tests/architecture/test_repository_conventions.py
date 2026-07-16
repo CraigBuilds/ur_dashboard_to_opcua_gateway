@@ -4,7 +4,7 @@ import ast
 import pathlib
 import typing
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 PRODUCTION_ROOT = PROJECT_ROOT / "code" / "src" / "ur_dashboard_to_opcua_gateway"
 PYTHON_ROOTS = (PRODUCTION_ROOT, PROJECT_ROOT / "tests")
 

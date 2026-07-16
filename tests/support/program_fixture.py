@@ -1,4 +1,4 @@
-"""Generate deterministic UR program fixtures for gateway tests."""
+"""Generate deterministic UR program fixtures shared by unit and system tests."""
 
 import gzip
 import pathlib
@@ -12,7 +12,8 @@ RUN_SECONDS = 30.0
 def program_xml(name: str, robot_directory: str = "/ursim/programs", installation_relative_path: str = "default") -> str:
     """Return a valid PolyScope 5 program that waits without moving the robot."""
     # PolyScope requires its canonical XML serialization and rejects some semantically equivalent formatting.
-    template = textwrap.dedent(f"""
+    template = textwrap.dedent(
+        f"""
         <URProgram
           name="{name}"
           installation="default"
@@ -65,7 +66,8 @@ def program_xml(name: str, robot_directory: str = "/ursim/programs", installatio
               <children><Wait type="Sleep"><waitTime>{RUN_SECONDS}</waitTime></Wait></children></MainProgram>
           </children>
         </URProgram>
-        """).lstrip()
+        """
+    ).lstrip()
     root = xml.etree.ElementTree.fromstring(template)
 
     return xml.etree.ElementTree.tostring(root, encoding="unicode")

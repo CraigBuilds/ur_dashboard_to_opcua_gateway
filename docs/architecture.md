@@ -60,6 +60,35 @@ _07_expose_program_commands_via_opcua
 The graph is acyclic. `_02_parse_command_line_args` does not import later application modules, while `_03_compose_gateway` is the composition root and is the
 only module that imports every concrete component.
 
+External dependencies remain at the relevant adapter or process boundary:
+
+```text
+_01_main
+    asyncua.sync, signal, threading
+
+_02_parse_command_line_args
+    Python standard library only
+
+_03_compose_gateway
+    asyncua.sync, functools
+
+_04_discover_ur_programs
+    pathlib and stat for all catalogues
+    paramiko only when SFTP discovery is selected
+
+_05_control_ur_programs_via_dashboard
+    socket and functools
+
+_06_combine_program_discovery_and_control
+    Python standard library only
+
+_07_expose_program_commands_via_opcua
+    asyncua
+```
+
+Paramiko's type-checking import does not execute at runtime, and the operational imports remain inside the SFTP functions. Local-only installations therefore do
+not require Paramiko.
+
 ## Public module APIs
 
 Each module declares its cross-module API in `__all__`. Functions, constants, and type aliases that begin with an underscore are module-internal implementation
@@ -117,8 +146,8 @@ discover_programs_function = functools.partial(discover_ur_programs.discover_pro
 dashboard_commands = control_ur_programs_via_dashboard.create_dashboard_commands(args)
 ```
 
-`tests/test_namespace_imports.py` enforces module docstrings, namespace imports, consumer documentation for public callables, and the rule that production
-classes are reserved for dataclasses.
+`tests/architecture/test_repository_conventions.py` enforces module docstrings, parser help messages, namespace imports, consumer documentation for public
+callables, and the rule that production classes are reserved for dataclasses.
 
 ## Runtime flow
 
@@ -146,16 +175,26 @@ application commands remain independent of OPC UA, so other transports can be ad
 ## Repository layout
 
 ```text
+.gitattributes
 .github/workflows/ci.yml
+.gitignore
+AGENTS.md
+README.md
 code/
     Dockerfile
     pyproject.toml
     src/ur_dashboard_to_opcua_gateway/
 docs/
 tests/
+    architecture/
+    unit/
+    system/
+    support/
 ```
 
-`code/pyproject.toml` is the single source of package and dependency metadata. Generated caches, egg metadata, and built distributions are intentionally absent.
+`AGENTS.md` stores durable repository guidance for Codex, including the required Git workflow. `code/pyproject.toml` is the single source of package and
+dependency metadata. The test folders separate static architecture checks, isolated unit tests, Docker-backed system tests, and shared support code. Generated
+caches, egg metadata, and built distributions are intentionally absent.
 
 ## Python compatibility
 

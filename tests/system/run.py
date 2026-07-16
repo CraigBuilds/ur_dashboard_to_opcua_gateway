@@ -29,7 +29,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _repository_root() -> pathlib.Path:
     """Return the repository root."""
-    return pathlib.Path(__file__).resolve().parents[1]
+    return pathlib.Path(__file__).resolve().parents[2]
 
 
 def _run(command: typing.Sequence[str], cwd: pathlib.Path, environment: typing.Optional[typing.Dict[str, str]] = None) -> None:
@@ -221,7 +221,7 @@ def _require_docker(repository: pathlib.Path) -> str:
 
 def _ursim_image(python: pathlib.Path, repository: pathlib.Path, environment: typing.Dict[str, str]) -> str:
     """Read the pinned URSim image from the test harness."""
-    statement = "import tests.containers.ursim_container as ursim_container; print(ursim_container.URSIM_IMAGE)"
+    statement = "import tests.system.containers.ursim_container as ursim_container; print(ursim_container.URSIM_IMAGE)"
 
     return _capture([str(python), "-c", statement], repository, environment)
 

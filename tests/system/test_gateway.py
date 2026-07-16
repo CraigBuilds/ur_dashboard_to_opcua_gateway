@@ -12,7 +12,7 @@ if sys.version_info < (3, 10):
 
 pytest.importorskip("testcontainers", reason="Install the system-test extra to run container-backed tests.")
 
-import tests.robot_lab as robot_lab_module
+import tests.system.robot_lab as robot_lab_module
 
 OPC_NAMESPACE = expose_program_commands_via_opcua.OPC_NAMESPACE
 

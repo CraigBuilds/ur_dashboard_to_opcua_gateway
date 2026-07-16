@@ -1,3 +1,4 @@
+# This server is isolated inside the disposable system-test network.
 Port 22
 PermitRootLogin yes
 PasswordAuthentication yes

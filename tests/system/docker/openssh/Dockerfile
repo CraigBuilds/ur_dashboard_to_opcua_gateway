@@ -1,5 +1,6 @@
 FROM debian:bookworm-slim
 
+# Build the disposable SFTP service used only by system tests.
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-server && rm -rf /var/lib/apt/lists/*
 
 COPY sshd_config /etc/ssh/sshd_config

@@ -157,6 +157,9 @@ The design phase must also resolve:
 
 This feature should be designed and tested as a complete invocation subsystem before adding isolated argument nodes to the current address space.
 
+See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) for the proposed separation between Dashboard lifecycle control, RTDE or
+alternative invocation transports, protocol-neutral coordination, OPC UA exposure, and reusable package extraction.
+
 ### Reusable Python packages
 
 - Evaluate extracting the generic capabilities into independently installable packages: an OPC UA callable-to-method server, a Universal Robots Dashboard

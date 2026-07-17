@@ -14,6 +14,11 @@ that other projects can install with `pip`.
 
 This is a proposed target architecture. The packages have not yet been extracted.
 
+The later [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) extends this proposal for parameterized program invocation. Dashboard
+control and program discovery remain strong package boundaries, while the OPC UA package scope should be finalized only after writable argument variables,
+invocation state, and events are proven. That design may also produce a fourth RTDE package, but recommends keeping RTDE inside the gateway until its public
+contract is stable.
+
 ## Summary
 
 The current modules already suggest natural package boundaries:

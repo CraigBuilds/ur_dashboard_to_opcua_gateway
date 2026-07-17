@@ -22,12 +22,12 @@ after writable argument variables, invocation state, and events are proven.
 
 The current and planned capabilities suggest these package boundaries:
 
-| Current or planned capability           | Proposed module                              | Suitability                                                         |
-| --------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
-| `_04_discover_ur_programs`              | `universal_robots_clients.program_discovery` | Strong, after configuration and SSH policy are decoupled            |
-| `_05_control_ur_programs_via_dashboard` | `universal_robots_clients.dashboard`         | Strongest and most immediately reusable candidate                   |
-| Planned RTDE adapter                    | `universal_robots_clients.rtde`              | Strong after its narrow public contract is proven in the gateway    |
-| `_07_expose_program_commands_via_opcua` | `opcua_method_server`                        | Strong, provided its address-space model remains deliberately small |
+| Current or planned capability                                                                     | Proposed module                              | Suitability                                                        |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| Dashboard behavior in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`    | `universal_robots_clients.dashboard`         | Strongest and most immediately reusable candidate                  |
+| Planned RTDE behavior in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde` | `universal_robots_clients.rtde`              | Strong after its narrow public contract is proven in the gateway   |
+| `_04_discover_ur_programs`                                                                        | `universal_robots_clients.program_discovery` | Strong, after configuration and SSH policy are decoupled           |
+| `_07_expose_program_commands_via_opcua`                                                           | `opcua_method_server`                        | Strong if its address-space model remains deliberately constrained |
 
 The other production modules should remain application code:
 

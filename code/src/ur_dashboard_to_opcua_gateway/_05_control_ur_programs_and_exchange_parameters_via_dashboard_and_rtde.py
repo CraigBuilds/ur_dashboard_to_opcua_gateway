@@ -1,16 +1,22 @@
-"""Provide configured functions for Universal Robots Dashboard operations.
+"""Control UR programs through Dashboard and prepare for parameter exchange through RTDE.
 
-This module is the robot-control adapter. It implements the Dashboard Server's line-oriented TCP exchange and presents ordinary Python callables for loading,
-starting, pausing, stopping, and querying a program. Each invocation validates that the command cannot inject another protocol line, opens a connection, reads
-the server greeting, sends one newline-terminated command, reads one response, and closes the connection. Responses remain stripped text in the MVP rather than
-being interpreted as typed success or failure values.
+This module is the gateway's robot-facing control and data-exchange boundary. Its implemented MVP API uses the Dashboard Server for program lifecycle operations:
+loading, starting, pausing, stopping, and querying a program. Each invocation validates that the command cannot inject another protocol line, opens a connection,
+reads the server greeting, sends one newline-terminated command, reads one response, and closes the connection. Responses remain stripped text rather than being
+interpreted as typed success or failure values.
+
+RTDE parameter exchange is deliberately named as the second responsibility of this boundary, but it is not implemented yet. The register contract, invocation
+handshake, supported value types, persistent connection ownership, and robot-side acknowledgement rules must be proven together before a public RTDE API is added.
+Keeping that work in this module initially will let the gateway prototype Dashboard-plus-RTDE behaviour before the two protocol implementations are separated
+into modules of the proposed ``universal_robots_clients`` package.
 
 The public API includes the ``DashboardCommand`` and ``DashboardCommands`` callable types, low-level ``send_command()``, and
 ``create_dashboard_commands(args)``. The factory binds the configured host, port, and timeout into a dictionary whose function signatures are suitable for the
 application registry and OPC UA method generation. Command-specific formatting and socket exchange helpers remain internal.
 
-This module depends on ``Args`` from ``_02_parse_command_line_args`` and Python's ``socket`` and ``functools`` modules. It does not depend on discovery, command
-combination, or OPC UA, which keeps the Dashboard protocol usable and testable on its own.
+This module currently depends on ``Args`` from ``_02_parse_command_line_args`` and Python's ``socket`` and ``functools`` modules. It does not depend on discovery,
+command combination, or OPC UA. A future RTDE implementation may add an optional third-party protocol dependency while keeping invocation policy in the gateway's
+combination layer.
 """
 
 import functools

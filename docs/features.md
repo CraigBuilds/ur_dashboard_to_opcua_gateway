@@ -22,20 +22,21 @@
 
 ### OPC UA
 
-- Expose generic program and Dashboard methods beneath `Objects/UR20`.
-- Mirror program directories beneath `ProgramShortcuts`.
-- Add no-argument `load()` and `run()` methods for each discovered program.
-- Expose program lists as OPC UA string arrays.
+- Create fixed, flat `Status`, `Parameters`, and `Methods` folders beneath `Objects/UR20`.
+- Add one no-argument `StartProgram_...()` method for every program discovered at startup.
+- Add controller-wide `PauseProgram()` and `StopProgram()` methods.
+- Poll the Dashboard program-state getter into the read-only `Status/ProgramState` variable.
+- Reserve the empty `Parameters` folder for typed RTDE-backed setters.
 
 ### Runtime
 
 - Configure local or SFTP catalogue selection through the command line.
 - Resolve validated configuration into an immutable `Args` data class.
-- Represent program discovery and Dashboard operations as configured functions.
-- Build generic controller commands and bound per-program operations into one `CommandRegistry` data model.
-- Compose concrete modules without starting them.
+- Call program discovery and Dashboard operations directly through qualified `universal_robots_clients` module APIs.
+- Build flat status, parameter, and method dictionaries directly in the composition root.
+- Create an unstarted server through the independently installable `declarative_opcua_server` package.
 - Read the SFTP password from `UR_ROBOT_PASSWORD` or an interactive prompt.
-- Keep Paramiko optional and import it only when SFTP discovery is used.
+- Keep Paramiko in the optional `universal-robots-clients[sftp]` extra and import it only for SFTP connection setup.
 - Keep process startup, `SIGINT`, `SIGTERM`, and shutdown in the main module.
 - Run as an installed command or Docker container.
 
@@ -43,9 +44,11 @@
 
 These are accepted MVP limitations:
 
-- Program shortcuts are generated only at startup.
-- Dashboard responses are returned as text rather than interpreted as typed success or failure results.
-- `run()` performs load followed by start without validating the load response.
+- Program start methods are generated only at startup.
+- Dashboard responses remain text and are currently discarded by no-result OPC UA methods rather than interpreted as success or failure.
+- A generated start method performs load followed by play without validating the load response.
+- `ProgramState` temporarily polls Dashboard rather than RTDE, opening one connection per poll.
+- RTDE and parameter nodes are not implemented yet.
 - Robot operations are not serialized across concurrent OPC UA clients.
 - OPC UA uses `NoSecurity`.
 - SFTP automatically accepts unknown host keys and supports password authentication only.
@@ -55,25 +58,21 @@ The MVP should therefore be used on a controlled or isolated network.
 
 ## Planned features
 
-The module boundaries are intended to support these additions without redesigning the package.
+The package boundaries and compact composition root are intended to support these additions without redesigning the reusable protocol layers.
 
-### Per-program operations
+### Flat program methods
 
-- Complete the terminology change from "program shortcuts" to **per-program operations** in the public OPC UA address space. If compatibility permits, rename
-  the `ProgramShortcuts` folder to `Programs`, represent each discovered program as an object, and rename the generic `programs()` method to `list_programs()`
-  to avoid ambiguity.
-- Expand each program object beyond the current no-argument `load()` and `run()` convenience methods. Candidate operations include loading, starting, invoking
-  with arguments, and reading whether that specific program is loaded or active.
-- Keep controller-wide behavior semantically honest. Dashboard `pause`, `stop`, loaded-program, and current-state commands act on the robot controller rather
-  than a named program. They should remain robot-level operations unless a per-program wrapper verifies that the selected program is the active target before
-  acting.
-- Decide how program additions, removals, and metadata changes update the `Programs` tree. The current startup-only snapshot can remain the MVP behavior, while
-  later versions may support an explicit refresh or controlled address-space rebuild.
+- Keep one start method per discovered program, with deterministic names such as `StartProgram_Production_PickPart`.
+- Decide how program additions, removals, renames, and flattening collisions update the method interface. The current startup snapshot can remain the MVP, while
+  later versions may support explicit refresh and controlled server reconstruction.
+- Add typed task metadata outside the reusable OPC UA package when parameters are enabled. The package should continue to receive already composed flat
+  dictionaries rather than discover programs or understand task schemas itself.
+- Keep controller-wide pause, stop, and state behavior separate from generated program methods.
 
 ### Program invocation arguments
 
-Universal Robots programs do not accept ordinary function arguments when loaded or started through the Dashboard Server. Supporting parameterized tasks
-therefore requires an invocation protocol shared by the gateway and the robot-side program architecture, not merely extra Dashboard commands.
+Universal Robots programs do not accept ordinary function arguments when loaded or started through Dashboard. Supporting parameterized tasks therefore requires
+a protocol shared by the gateway and robot-side code, not method input arguments added to Dashboard commands.
 
 The design should support at least these robot architectures:
 
@@ -82,7 +81,7 @@ The design should support at least these robot architectures:
 - **Main-loop dispatcher:** one long-running robot program receives a task identifier and arguments, then dispatches to the appropriate internal routine. The
   gateway normally leaves the dispatcher loaded and running, publishes a new invocation, and signals that work is ready.
 
-The application model should describe a task independently of either architecture. A task definition should include:
+The application should describe a task independently of either architecture. A task definition should include:
 
 - A stable task name.
 - Its program path or dispatcher task identifier.
@@ -90,33 +89,26 @@ The application model should describe a task independently of either architectur
 - A typed argument schema containing names, required values, defaults, validation constraints, descriptions, and robot-side mappings.
 - Optional timeout, cancellation, and result definitions.
 
-The initial OPC UA design should provide both a convenient high-level API and explicit low-level control. A generated program or task object could resemble:
+The implemented declarative package is intentionally flat and has no method arguments. The first invocation model should use typed parameter setters, typed
+status getters, and no-argument methods:
 
 ```text
-Programs/
-    Production/
-        PickPart.urp/
-            Arguments/
-                Staged/
-                    part_id
-                    quantity
-                Active/
-                    part_id
-                    quantity
-            load()
-            start()
-            invoke(part_id, quantity)
-            commit_arguments()
-            invocation_state()
+Status/
+    ActiveInvocationId
+    InvocationState
+    PickPart_QuantityActual
+Parameters/
+    PickPart_PartId
+    PickPart_Quantity
+Methods/
+    StartProgram_Production_PickPart()
+    CancelInvocation()
 ```
 
-The exact node names remain a design decision, but the two levels should behave as follows:
-
-- `invoke(...)` is the easy path. Its OPC UA inputs are generated from the task's argument schema. One call validates the values, creates a committed
-  invocation, selects the appropriate robot execution strategy, triggers the task, and returns an invocation identifier or structured status.
-- The low-level path lets a client write individual `Arguments/Staged` nodes, inspect or correct them, call `commit_arguments()`, and then use explicit
-  `load()`, `start()`, or dispatcher controls. This supports commissioning, diagnostics, PLC-style clients, and integrations that need to own each step.
-- Both paths must use the same validation, commit, execution, and status machinery so the convenience API cannot behave differently from manual control.
+Parameter setters write caller values to RTDE staging registers. A start or invoke method validates that the required parameters have been supplied, assigns an
+invocation identifier, commits the staged register set, and then uses the configured execution strategy. Status getters poll RTDE values and publish robot
+acknowledgement, execution state, and results. A later convenience API with method arguments should be considered only after this flat contract proves
+insufficient; it is not part of `declarative_opcua_server` version 0.1.
 
 Individual OPC UA variable writes are not atomic. The argument protocol must prevent a robot from reading a mixture of old and new values:
 
@@ -128,8 +120,8 @@ Individual OPC UA variable writes are not atomic. The argument protocol must pre
    concurrent invocations; a queue can be added later.
 
 The gateway should expose invocation status separately from raw Dashboard state. Candidate states include `STAGED`, `READY`, `ACKNOWLEDGED`, `RUNNING`,
-`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT`, together with the invocation identifier, selected task, validation errors, robot acknowledgement, and any
-result values.
+`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT`, together with flat status nodes for the invocation identifier, selected task, validation error, robot
+acknowledgement, and result values.
 
 OPC UA nodes read by the robot are one possible argument transport, but the application abstraction should not require every robot deployment to use that
 mechanism. The invocation coordinator should be able to use interchangeable robot-side adapters, for example:
@@ -139,11 +131,10 @@ mechanism. The invocation coordinator should be able to use interchangeable robo
 - Fieldbus or PLC registers.
 - Another explicitly designed robot communication mechanism.
 
-The gateway should generate writable argument nodes and typed `invoke(...)` method inputs from one declarative task schema supplied at startup. It should use
-the generic folders, objects, methods, and variables provided by `declarative_opcua_server`, while retaining ownership of task validation, invocation state, and
-robot-transport coordination. The schema source could be gateway configuration, a companion metadata file beside each program, or a separately managed task
-manifest; this must be decided before implementation. Program discovery should continue to find `.urp` files without requiring metadata, while parameterized
-invocation is enabled only for programs or dispatcher tasks with a valid schema.
+The gateway should generate flat parameter, status, and method mappings from one declarative task schema supplied at startup. It supplies ordinary callables to
+`declarative_opcua_server` while retaining task validation, invocation state, naming, and robot-transport coordination. The schema source could be gateway
+configuration, a companion metadata file, or a task manifest. Program discovery should continue without requiring metadata, while parameterized invocation is
+enabled only for tasks with valid schemas and register mappings.
 
 The design phase must also resolve:
 
@@ -153,30 +144,28 @@ The design phase must also resolve:
 - How dispatcher task identifiers are registered and validated.
 - How acknowledgements, completion, cancellation, timeout, restart recovery, and duplicate invocation identifiers behave.
 - How concurrent OPC UA clients are serialized and authorized.
-- Whether results are returned synchronously, published through invocation nodes, or both.
+- How results are represented through flat status nodes and whether a later synchronous result API is justified.
 - How schema changes affect existing clients and OPC UA node identifiers.
 
-This feature should be designed and tested as a complete invocation subsystem before adding isolated argument nodes to the current address space.
+This feature should be designed and tested as a complete invocation subsystem before adding isolated parameter setters to the current address space.
 
 See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) for the proposed separation between Dashboard lifecycle control, RTDE or
 alternative invocation transports, protocol-neutral coordination, OPC UA exposure, and reusable package extraction.
 
 ### Reusable Python packages
 
-- Proceed with two independently installable distributions: `declarative_opcua_server` and `universal_robots_clients`.
-- Extract `declarative_opcua_server` first. Its bounded version-one API should cover explicit folders and objects, synchronous methods, read-only and writable
-  variables, supported primitive scalar and homogeneous array types, optional stable NodeIds, server configuration and lifecycle, and predictable failure
-  handling.
-- Treat that first package as complete only when real OPC UA clients can browse, call, read, and write through its documented API; invalid definitions and
-  lifecycle failures are tested; built wheels and source distributions install cleanly; and the gateway's full URSim pipeline passes against the artifact.
-- Keep robot task schemas, invocation identifiers, staged and active values, RTDE mappings, and execution policy in this gateway. Add a generic event-source
-  descriptor to the package later only if the implemented invocation model demonstrates a concrete need.
-- Establish `universal_robots_clients` afterward, with separate Dashboard and program-discovery modules and an eventual RTDE module added only after its
-  connection and register contract is proven here.
+- Maintain the two local independently installable distributions now implemented beneath `packages/`: `declarative_opcua_server` and `universal_robots_clients`.
+- Keep `declarative_opcua_server` bounded to three flat interfaces: polled status getters, client-written parameter setters, and no-argument methods. Do not add
+  arbitrary object descriptors, nested schemas, stable NodeId configuration, or events without a concrete consumer that cannot use asyncua directly.
+- Complete callback-failure, port-binding, subscription, build-artifact, and clean-install tests before publishing version 0.1 externally.
+- Keep robot task schemas, invocation identifiers, staged and active values, RTDE mappings, and execution policy in this gateway. Add another OPC UA capability
+  later only if the implemented invocation model demonstrates that flat status, parameter, and method functions are insufficient.
+- Keep the implemented Dashboard and program-discovery modules independent. Add `universal_robots_clients.rtde` only after its dependency, connection, getter,
+  setter, timeout, and reconnect contracts are proven against URSim.
 - Decouple each package from gateway `Args`, UR20-specific OPC UA names, application command dictionaries, shortcut policy, password prompting, and process
   lifecycle.
-- Keep this repository as the product-specific composition layer that installs the packages with `pip`, selects configuration and execution policy, builds the
-  per-program operation model, and owns startup and shutdown.
+- Keep this repository as the product-specific composition layer that installs the packages with pip, selects configuration and execution policy, builds flat
+  interfaces, and owns process startup and shutdown.
 - Preserve the real URSim system suite here as the compatibility contract between released package versions.
 - Balance reuse against the additional cost of independent versioning, documentation, CI, publishing, dependency constraints, and coordinated upgrades.
 
@@ -224,15 +213,14 @@ See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md
 - Prefer an established library if it provides tested protocol handling, reconnection, synchronization, error interpretation, and compatibility across relevant
   robot and PolyScope versions.
 - Before adoption, assess maintenance activity, licensing, Python 3.8.3 support, native or container dependencies, API stability, security history, and fit with
-  the gateway's functional module boundaries.
-- Keep the direct socket implementation while the MVP only needs a small set of line-oriented Dashboard commands, because a broader robot library would
-  currently add dependency and architectural complexity without replacing much code.
+  the gateway's small qualified package APIs.
+- Keep the direct socket implementation inside `universal_robots_clients.dashboard` while the MVP only needs a small set of line-oriented commands, because a
+  broader robot library would currently add dependency and architectural complexity without replacing much code.
 
 ### Implementation decisions to reconsider
 
-- Reconsider replacing Paramiko's type-checking and function-local imports with a top-level namespace import such as `import paramiko as sshv2` if SFTP becomes
-  a required part of every deployment. The current import arrangement keeps Paramiko optional so local-catalogue users can install and run the application
-  without its SSH dependencies; a top-level import would make Paramiko mandatory even when SFTP is not used.
+- Reconsider replacing the function-local Paramiko import in `universal_robots_clients.program_discovery` with a top-level namespace import only if SFTP becomes
+  mandatory for every package consumer. The current import keeps local discovery available without SSH dependencies.
 - Reconsider maintaining a persistent Dashboard connection, connection pool, or stateful Dashboard session if command frequency, connection latency, or
   multi-command operations justify it. The MVP deliberately opens one connection per command because this is stateless, isolates failed exchanges, and avoids
   connection ownership, locking, stale-session detection, reconnection, and shutdown lifecycle concerns. Any persistent design should define serialization,

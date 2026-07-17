@@ -5,8 +5,17 @@ import pathlib
 import typing
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-PRODUCTION_ROOT = PROJECT_ROOT / "code" / "src" / "ur_dashboard_to_opcua_gateway"
-PYTHON_ROOTS = (PRODUCTION_ROOT, PROJECT_ROOT / "tests")
+PRODUCTION_ROOTS = (
+    PROJECT_ROOT / "code" / "src" / "ur_dashboard_to_opcua_gateway",
+    PROJECT_ROOT / "packages" / "declarative_opcua_server" / "src" / "declarative_opcua_server",
+    PROJECT_ROOT / "packages" / "universal_robots_clients" / "src" / "universal_robots_clients",
+)
+PYTHON_ROOTS = (
+    *PRODUCTION_ROOTS,
+    PROJECT_ROOT / "packages" / "declarative_opcua_server" / "tests",
+    PROJECT_ROOT / "packages" / "universal_robots_clients" / "tests",
+    PROJECT_ROOT / "tests",
+)
 
 
 def python_files() -> typing.List[pathlib.Path]:
@@ -66,27 +75,28 @@ def test_public_callables_document_their_consumers() -> None:
     """Require public functions, classes, and methods to state where they are used."""
     undocumented: typing.List[str] = []
 
-    for path in sorted(PRODUCTION_ROOT.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for root in PRODUCTION_ROOTS:
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
-        for node in tree.body:
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) or node.name.startswith("_"):
-                continue
+            for node in tree.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) or node.name.startswith("_"):
+                    continue
 
-            docstring = ast.get_docstring(node) or ""
+                docstring = ast.get_docstring(node) or ""
 
-            if "Used by " not in docstring:
-                undocumented.append(f"{path.name}:{node.lineno}: {node.name}")
+                if "Used by " not in docstring:
+                    undocumented.append(f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}: {node.name}")
 
-            if isinstance(node, ast.ClassDef):
-                for member in node.body:
-                    if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) or member.name.startswith("_"):
-                        continue
+                if isinstance(node, ast.ClassDef):
+                    for member in node.body:
+                        if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) or member.name.startswith("_"):
+                            continue
 
-                    member_docstring = ast.get_docstring(member) or ""
+                        member_docstring = ast.get_docstring(member) or ""
 
-                    if "Used by " not in member_docstring:
-                        undocumented.append(f"{path.name}:{member.lineno}: {node.name}.{member.name}")
+                        if "Used by " not in member_docstring:
+                            undocumented.append(f"{path.relative_to(PROJECT_ROOT)}:{member.lineno}: {node.name}.{member.name}")
 
     assert not undocumented, "Public callables must document their consumers:\n" + "\n".join(undocumented)
 
@@ -110,17 +120,18 @@ def test_production_classes_are_dataclasses() -> None:
     """Keep production behavior functional by reserving classes for data."""
     non_data_classes: typing.List[str] = []
 
-    for path in sorted(PRODUCTION_ROOT.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for root in PRODUCTION_ROOTS:
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef):
-                continue
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
 
-            decorators = {_decorator_name(decorator) for decorator in node.decorator_list}
-            is_dataclass = any(decorator.startswith("dataclasses.dataclass") for decorator in decorators)
+                decorators = {_decorator_name(decorator) for decorator in node.decorator_list}
+                is_dataclass = any(decorator.startswith("dataclasses.dataclass") for decorator in decorators)
 
-            if not is_dataclass:
-                non_data_classes.append(f"{path.name}:{node.lineno}: {node.name}")
+                if not is_dataclass:
+                    non_data_classes.append(f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}: {node.name}")
 
     assert not non_data_classes, "Production classes must be dataclasses:\n" + "\n".join(non_data_classes)

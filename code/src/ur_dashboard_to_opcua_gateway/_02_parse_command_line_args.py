@@ -8,8 +8,8 @@ prompt. The Dashboard host defaults to the SFTP robot host when appropriate.
 The public API consists of ``Args``, the shared configuration value object, and ``parse_args()``, which builds and executes the parser. Parser construction,
 password acquisition, and default resolution are internal helpers.
 
-This foundational module depends only on the Python standard library. It is consumed by ``_01_main``, the composition root, program discovery, and Dashboard
-control, but imports none of those modules; that direction keeps the package dependency graph acyclic.
+This foundational module depends only on the Python standard library. It is consumed by ``_01_main`` and ``_03_compose_gateway`` but imports neither module;
+that direction keeps the package dependency graph acyclic.
 """
 
 import argparse
@@ -33,8 +33,7 @@ _PASSWORD_VARIABLE = "UR_ROBOT_PASSWORD"
 class Args:
     """Resolved gateway configuration.
 
-    Used by ``_01_main``, ``_03_compose_gateway``, ``_04_discover_ur_programs``, and
-    ``_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde``.
+    Used by ``_01_main`` and ``_03_compose_gateway``.
     """
 
     catalog: str

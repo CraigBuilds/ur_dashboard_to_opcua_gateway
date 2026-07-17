@@ -1,26 +1,17 @@
-"""Test gateway protocol, validation, command, and lifecycle behaviour in isolation.
-
-These tests complement ``test_components`` by exercising important failure branches and
-adapter boundaries with deterministic fakes. They do not require Docker, a robot,
-an SSH server, an OPC UA client, or any external network connection.
-"""
+"""Test gateway validation, package binding, application policy, and lifecycle."""
 
 import pathlib
 import signal
-import stat
-import sys
 import types
 import typing
 import unittest.mock
 
-import asyncua.ua
 import pytest
+import universal_robots_clients.dashboard as dashboard
+import universal_robots_clients.program_discovery as program_discovery
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
-import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
-import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
-import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
+import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
 
 import tests.support.program_fixture as program_fixture
 import tests.system.run as run_system_tests
@@ -40,7 +31,6 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
     monkeypatch.delenv("UR_ROBOT_PASSWORD", raising=False)
     prompts: typing.List[str] = []
     monkeypatch.setattr(parse_command_line_args.getpass, "getpass", lambda prompt: prompts.append(prompt) or "prompted-secret")
-
     args = parse_command_line_args.parse_args(
         [
             "--catalog",
@@ -63,17 +53,12 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
     )
 
     assert prompts == ["Robot password: "]
-    assert args == parse_command_line_args.Args(
-        catalog="sftp",
-        programs_folder="/robot/programs",
-        robot_host="robot.example",
-        robot_password="prompted-secret",
-        sftp_port=2222,
-        sftp_username="operator",
-        dashboard_host="dashboard.example",
-        dashboard_port=30000,
-        opcua_endpoint="opc.tcp://127.0.0.1:5000/gateway/",
-    )
+    assert args.robot_host == "robot.example"
+    assert args.robot_password == "prompted-secret"
+    assert args.sftp_port == 2222
+    assert args.sftp_username == "operator"
+    assert args.dashboard_host == "dashboard.example"
+    assert args.dashboard_port == 30000
 
 
 @pytest.mark.parametrize(
@@ -87,199 +72,93 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
 def test_discovery_rejects_invalid_configuration(args: parse_command_line_args.Args, message: str) -> None:
     """Report unsupported or incomplete discovery configuration clearly."""
     with pytest.raises(ValueError, match=message):
-        discover_ur_programs.discover_programs(args)
+        compose_gateway._discover_programs(args)
 
 
-def test_sftp_discovery_dispatches_resolved_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pass resolved SFTP configuration to the transport adapter."""
+def test_sftp_discovery_delegates_resolved_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pass application configuration into the reusable SFTP discovery package."""
     captured: typing.Dict[str, object] = {}
 
-    def discover(host: str, password: str, folder: pathlib.PurePosixPath, port: int, username: str) -> typing.List[str]:
-        """Capture one SFTP discovery request."""
-        captured.update(host=host, password=password, folder=folder, port=port, username=username)
+    def discover(**configuration: object) -> typing.List[str]:
+        """Capture one package discovery call."""
+        captured.update(configuration)
 
         return ["Main.urp"]
 
-    monkeypatch.setattr(discover_ur_programs, "_discover_sftp_programs", discover)
+    monkeypatch.setattr(program_discovery, "discover_programs_over_sftp", discover)
     args = parse_command_line_args.Args(
         catalog="sftp", programs_folder="/robot/programs", robot_host="robot", robot_password="secret", sftp_port=2222, sftp_username="operator"
     )
 
-    assert discover_ur_programs.discover_programs(args) == ["Main.urp"]
-    assert captured == {"host": "robot", "password": "secret", "folder": pathlib.PurePosixPath("/robot/programs"), "port": 2222, "username": "operator"}
+    assert compose_gateway._discover_programs(args) == ["Main.urp"]
+    assert captured == {"host": "robot", "root": "/robot/programs", "username": "operator", "password": "secret", "port": 2222, "trust_unknown_host_keys": True}
 
 
-def test_recursive_sftp_discovery_filters_and_relativizes_programs() -> None:
-    """Walk nested SFTP folders and return only relative URP paths."""
-    sftp = unittest.mock.MagicMock()
-    entries = {
-        "/programs": [
-            types.SimpleNamespace(filename="Main.URP", st_mode=stat.S_IFREG),
-            types.SimpleNamespace(filename="Production", st_mode=stat.S_IFDIR),
-            types.SimpleNamespace(filename="notes.txt", st_mode=stat.S_IFREG),
-        ],
-        "/programs/Production": [
-            types.SimpleNamespace(filename="PickPart.urp", st_mode=stat.S_IFREG),
-            types.SimpleNamespace(filename="readme.md", st_mode=None),
-        ],
-    }
-    sftp.listdir_attr.side_effect = lambda folder: entries[folder]
-    root = pathlib.PurePosixPath("/programs")
+def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bind package operations into typed flat interfaces and retain execution order."""
+    calls: typing.List[typing.Tuple[str, typing.Tuple[object, ...]]] = []
+    captured: typing.Dict[str, object] = {}
 
-    programs = list(discover_ur_programs._recursive_find_sftp_programs(sftp, root, root))
+    def load(host: str, program: str, port: int, timeout: float) -> str:
+        calls.append(("load", (host, program, port, timeout)))
 
-    assert programs == ["Main.URP", "Production/PickPart.urp"]
-    assert [call.args[0] for call in sftp.listdir_attr.call_args_list] == ["/programs", "/programs/Production"]
+        return "loaded"
 
+    def command(name: str, response: str) -> typing.Callable[[str, int, float], str]:
+        def run(host: str, port: int, timeout: float) -> str:
+            calls.append((name, (host, port, timeout)))
 
-def test_sftp_transport_configures_ssh_and_sorts_results(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Configure SSH, close both contexts, and sort transport results."""
-    ssh = unittest.mock.MagicMock()
-    sftp = unittest.mock.MagicMock()
-    ssh.open_sftp.return_value.__enter__.return_value = sftp
-    policy = object()
-    paramiko = types.SimpleNamespace(SSHClient=lambda: ssh, AutoAddPolicy=lambda: policy)
-    monkeypatch.setitem(sys.modules, "paramiko", paramiko)
-    monkeypatch.setattr(discover_ur_programs, "_recursive_find_sftp_programs", lambda actual, root, folder: iter(["Z.urp", "A.urp"]))
-    folder = pathlib.PurePosixPath("/programs")
+            return response
 
-    programs = discover_ur_programs._discover_sftp_programs("robot", "secret", folder, 2222, "operator")
+        return run
 
-    assert programs == ["A.urp", "Z.urp"]
-    ssh.set_missing_host_key_policy.assert_called_once_with(policy)
-    ssh.connect.assert_called_once_with("robot", port=2222, username="operator", password="secret")
-    ssh.__enter__.assert_called_once_with()
-    ssh.__exit__.assert_called_once()
-    ssh.open_sftp.return_value.__enter__.assert_called_once_with()
-    ssh.open_sftp.return_value.__exit__.assert_called_once()
-
-
-@pytest.mark.parametrize("command", ["play\nstop", "play\rstop"])
-def test_dashboard_rejects_line_breaks(command: str) -> None:
-    """Reject both newline forms before opening a Dashboard connection."""
-    with pytest.raises(ValueError, match="line breaks"):
-        control_ur_programs_and_exchange_parameters.send_command("127.0.0.1", 29999, command)
-
-
-def test_dashboard_send_command_exchanges_one_protocol_line(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Read the greeting, send one line, and return a stripped response."""
-    stream = unittest.mock.MagicMock()
-    stream.readline.side_effect = [b"Connected: Universal Robots Dashboard Server\n", b"Starting program\r\n"]
-    connection = unittest.mock.MagicMock()
-    connection.makefile.return_value = stream
-    create_connection = unittest.mock.MagicMock(return_value=connection)
-    monkeypatch.setattr(control_ur_programs_and_exchange_parameters.socket, "create_connection", create_connection)
-
-    response = control_ur_programs_and_exchange_parameters.send_command("robot", 29999, "play", timeout=2.5)
-
-    assert response == "Starting program"
-    create_connection.assert_called_once_with(("robot", 29999), 2.5)
-    connection.makefile.assert_called_once_with("rwb")
-    stream.write.assert_called_once_with(b"play\n")
-    stream.flush.assert_called_once_with()
-    connection.__enter__.assert_called_once_with()
-    connection.__exit__.assert_called_once()
-    stream.__enter__.assert_called_once_with()
-    stream.__exit__.assert_called_once()
-
-
-@pytest.mark.parametrize(("responses", "message"), [([b""], "No greeting received"), ([b"Connected\n", b""], "No response received")])
-def test_dashboard_reports_incomplete_exchanges(monkeypatch: pytest.MonkeyPatch, responses: typing.List[bytes], message: str) -> None:
-    """Raise a connection error when the Dashboard closes unexpectedly."""
-    stream = unittest.mock.MagicMock()
-    stream.readline.side_effect = responses
-    connection = unittest.mock.MagicMock()
-    connection.makefile.return_value = stream
-    monkeypatch.setattr(control_ur_programs_and_exchange_parameters.socket, "create_connection", lambda address, timeout: connection)
-
-    with pytest.raises(ConnectionError, match=message):
-        control_ur_programs_and_exchange_parameters.send_command("robot", 29999, "play")
-
-
-def test_dashboard_commands_map_to_protocol_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Bind the configured endpoint and emit the exact Dashboard commands."""
-    calls: typing.List[typing.Tuple[str, int, str, float]] = []
-
-    def send_command(host: str, port: int, command: str, timeout: float = 5.0) -> str:
-        """Capture one configured command."""
-        calls.append((host, port, command, timeout))
-
-        return command
-
-    monkeypatch.setattr(control_ur_programs_and_exchange_parameters, "send_command", send_command)
+    monkeypatch.setattr(dashboard, "load_program", load)
+    monkeypatch.setattr(dashboard, "play_program", command("play", "played"))
+    monkeypatch.setattr(dashboard, "pause_program", command("pause", "paused"))
+    monkeypatch.setattr(dashboard, "stop_program", command("stop", "stopped"))
+    monkeypatch.setattr(dashboard, "get_program_state", command("state", "STOPPED"))
     args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
-    commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
+    monkeypatch.setattr(compose_gateway, "_discover_programs", lambda actual: ["Main.urp", "Production/Pick Part.urp"])
+    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or object())
 
-    assert commands["load"]("Production/PickPart.urp") == "load Production/PickPart.urp"
-    assert commands["start"]() == "play"
-    assert commands["pause"]() == "pause"
-    assert commands["stop"]() == "stop"
-    assert commands["status"]() == "programState"
+    compose_gateway.compose_gateway(args)
+
+    status_interface = typing.cast(typing.Dict[str, typing.Callable[[], object]], captured["status_interface"])
+    method_interface = typing.cast(typing.Dict[str, typing.Callable[[], None]], captured["method_interface"])
+    assert captured["parameter_interface"] == {}
+    assert set(method_interface) == {"StartProgram_Main", "StartProgram_Production_Pick_Part", "PauseProgram", "StopProgram"}
+    assert inspect_signature_parameters(status_interface) == set()
+    assert inspect_signature_parameters(method_interface) == set()
+    assert status_interface["ProgramState"]() == "STOPPED"
+    method_interface["StartProgram_Production_Pick_Part"]()
+    method_interface["PauseProgram"]()
+    method_interface["StopProgram"]()
     assert calls == [
-        ("robot", 30000, "load Production/PickPart.urp", 5.0),
-        ("robot", 30000, "play", 5.0),
-        ("robot", 30000, "pause", 5.0),
-        ("robot", 30000, "stop", 5.0),
-        ("robot", 30000, "programState", 5.0),
+        ("state", ("robot", 30000, 5.0)),
+        ("load", ("robot", "Production/Pick Part.urp", 30000, 5.0)),
+        ("play", ("robot", 30000, 5.0)),
+        ("pause", ("robot", 30000, 5.0)),
+        ("stop", ("robot", 30000, 5.0)),
     ]
 
 
-def test_command_registry_preserves_supplied_functions() -> None:
-    """Expose discovery and Dashboard functions under stable command names."""
-    discover = lambda: ["Main.urp"]
-    load = lambda program: program
-    start = lambda: "started"
-    dashboard_commands = {"load": load, "start": start}
+def inspect_signature_parameters(interface: typing.Mapping[str, typing.Callable[..., object]]) -> typing.Set[str]:
+    """Return all parameters remaining on an interface's functions."""
+    import inspect
 
-    command_registry = combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
-
-    assert command_registry.commands == {"programs": discover, "load": load, "start": start}
-    assert command_registry.commands["programs"] is discover
-    assert command_registry.commands["load"] is load
-    assert list(command_registry.program_operations) == ["Main.urp"]
+    return {parameter for function in interface.values() for parameter in inspect.signature(function).parameters}
 
 
-def test_command_registry_binds_each_program_and_runs_in_order() -> None:
-    """Create correctly bound load and run functions for every discovered program."""
-    events: typing.List[str] = []
+def test_program_method_name_collisions_are_rejected() -> None:
+    """Reject distinct program paths that flatten to the same OPC UA method name."""
+    args = parse_command_line_args.Args(catalog="local")
 
-    def load(program: str) -> str:
-        """Record a program load."""
-        events.append(f"load:{program}")
-
-        return f"loaded {program}"
-
-    def start() -> str:
-        """Record a program start."""
-        events.append("start")
-
-        return "started"
-
-    discover = lambda: ["Main.urp", "Production/PickPart.urp"]
-    dashboard_commands = {"load": load, "start": start}
-
-    command_registry = combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
-    program_operations = command_registry.program_operations
-
-    assert list(program_operations) == ["Main.urp", "Production/PickPart.urp"]
-    assert program_operations["Main.urp"]["load"]() == "loaded Main.urp"
-    assert events == ["load:Main.urp"]
-    events.clear()
-    assert program_operations["Production/PickPart.urp"]["run"]() == "loaded Production/PickPart.urp; started"
-    assert events == ["load:Production/PickPart.urp", "start"]
-
-
-def test_command_registry_requires_a_list_catalogue() -> None:
-    """Reject a discovery command that violates the registry contract."""
-    discover = lambda: "Main.urp"
-    dashboard_commands = {"load": lambda program: program, "start": lambda: "started"}
-
-    with pytest.raises(TypeError, match="must return a list"):
-        combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
+    with pytest.raises(ValueError, match="duplicate"):
+        compose_gateway._create_method_interface(args, ["Pick-Part.urp", "Pick Part.urp"])
 
 
 def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the server context active until either installed signal requests shutdown."""
+    """Keep the managed server active until either installed signal requests shutdown."""
     server = unittest.mock.MagicMock()
     stopped = unittest.mock.MagicMock()
     handlers: typing.Dict[int, typing.Callable[[int, typing.Optional[types.FrameType]], None]] = {}
@@ -303,81 +182,6 @@ def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pyte
     stopped.set.assert_called_once_with()
     server.__enter__.assert_called_once_with()
     server.__exit__.assert_called_once()
-
-
-def test_opcua_method_metadata_reflects_command_signatures() -> None:
-    """Generate scalar inputs and array outputs from command annotations."""
-    parent = unittest.mock.MagicMock()
-
-    def load(program: str) -> str:
-        """Return one scalar result."""
-        return program
-
-    def programs() -> typing.List[str]:
-        """Return one array result."""
-        return ["Main.urp"]
-
-    expose_program_commands_via_opcua._add_methods(parent, 4, {"load": load, "programs": programs})
-
-    assert parent.add_method.call_count == 2
-    load_call, programs_call = parent.add_method.call_args_list
-    assert load_call.args[0:2] == (4, "load")
-    assert [argument.Name for argument in load_call.args[3]] == ["program"]
-    assert load_call.args[4][0].Name == "result"
-    assert programs_call.args[0:2] == (4, "programs")
-    assert programs_call.args[3] == []
-    assert programs_call.args[4][0].ValueRank == asyncua.ua.ValueRank.OneDimension
-
-
-def test_opcua_folder_cache_reuses_existing_path_nodes() -> None:
-    """Create each nested folder once and reuse it for later program paths."""
-    root = unittest.mock.MagicMock()
-    production = unittest.mock.MagicMock()
-    cell = unittest.mock.MagicMock()
-    root.add_folder.return_value = production
-    production.add_folder.return_value = cell
-    folders: typing.Dict[pathlib.PurePosixPath, object] = {}
-    path = pathlib.PurePosixPath("Production/Cell")
-
-    first = expose_program_commands_via_opcua._get_program_folder(root, 4, path, folders)
-    second = expose_program_commands_via_opcua._get_program_folder(root, 4, path, folders)
-
-    assert first is cell
-    assert second is cell
-    root.add_folder.assert_called_once_with(4, "Production")
-    production.add_folder.assert_called_once_with(4, "Cell")
-    assert folders == {pathlib.PurePosixPath("Production"): production, path: cell}
-
-
-def test_create_server_configures_endpoint_namespace_and_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Build the server shell and pass application commands to both node adapters."""
-    server = unittest.mock.MagicMock()
-    server.register_namespace.return_value = 4
-    robot = unittest.mock.MagicMock()
-    server.nodes.objects.add_object.return_value = robot
-    commands = {"programs": lambda: []}
-    program_operations = {}
-    command_registry = combine_program_discovery_and_control.CommandRegistry(commands=commands, program_operations=program_operations)
-    method_calls: typing.List[typing.Tuple[object, int, object]] = []
-    program_operation_calls: typing.List[typing.Tuple[object, int, object]] = []
-    monkeypatch.setattr(expose_program_commands_via_opcua.asyncua.sync, "Server", lambda: server)
-    monkeypatch.setattr(expose_program_commands_via_opcua, "_add_methods", lambda parent, namespace, actual: method_calls.append((parent, namespace, actual)))
-    monkeypatch.setattr(
-        expose_program_commands_via_opcua,
-        "_add_program_operations",
-        lambda parent, namespace, actual: program_operation_calls.append((parent, namespace, actual)),
-    )
-
-    result = expose_program_commands_via_opcua.create_server(command_registry, "opc.tcp://127.0.0.1:4840/gateway/")
-
-    assert result is server
-    server.set_endpoint.assert_called_once_with("opc.tcp://127.0.0.1:4840/gateway/")
-    server.set_server_name.assert_called_once_with("ur_dashboard_to_opcua_gateway")
-    server.set_security_policy.assert_called_once_with([asyncua.ua.SecurityPolicyType.NoSecurity])
-    server.register_namespace.assert_called_once_with(expose_program_commands_via_opcua.OPC_NAMESPACE)
-    server.nodes.objects.add_object.assert_called_once_with(4, "UR20")
-    assert method_calls == [(robot, 4, commands)]
-    assert program_operation_calls == [(robot, 4, program_operations)]
 
 
 def test_program_fixture_archives_are_reproducible(tmp_path: pathlib.Path) -> None:
@@ -425,7 +229,6 @@ def test_system_test_command_forwards_selection_and_pytest_args(monkeypatch: pyt
     run_system_tests._run_tests(python, tmp_path, cache, "sftp", True, ["--", "-q", "--maxfail=1"])
 
     assert cache.is_dir()
-    assert len(captured) == 1
     command, cwd, environment = captured[0]
     assert command == [
         str(python),

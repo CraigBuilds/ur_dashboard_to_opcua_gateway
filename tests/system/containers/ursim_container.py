@@ -7,7 +7,7 @@ import typing
 
 import testcontainers.core.container as tc_container
 import testcontainers.core.network as tc_network
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
+import universal_robots_clients.dashboard as dashboard
 
 import tests.support.waiting as waiting
 
@@ -89,7 +89,7 @@ class UrSimContainer:
 
     def command(self, command: str) -> str:
         """Send a real Dashboard command."""
-        return control_ur_programs_and_exchange_parameters.send_command(self.host, self.dashboard_port, command)
+        return dashboard.send_command(self.host, command, self.dashboard_port)
 
     def prepare_robot(self) -> None:
         """Prepare URSim to execute the safe test program."""

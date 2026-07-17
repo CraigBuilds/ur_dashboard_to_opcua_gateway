@@ -9,22 +9,22 @@ description = "Expose UR programs through OPC UA"
 readme = {text = "ur_dashboard_to_opcua_gateway", content-type = "text/markdown"}
 requires-python = ">=3.8.3"
 dependencies = [
-    "asyncua==1.1.5; python_version < '3.10'",
-    "asyncua==2.0.1; python_version >= '3.10'",
+    "declarative-opcua-server==0.1.0",
+    "universal-robots-clients==0.1.0",
 ]
 
 [project.optional-dependencies]
 sftp = [
-    "paramiko>=3.5,<4",
+    "universal-robots-clients[sftp]==0.1.0",
 ]
 test = [
     "pytest>=8,<9",
 ]
 system-test = [
     "docker>=7,<8; python_version >= '3.10'",
-    "paramiko>=3.5,<4; python_version >= '3.10'",
     "pytest>=8,<10; python_version >= '3.10'",
     "testcontainers==4.14.2; python_version >= '3.10'",
+    "universal-robots-clients[sftp]==0.1.0",
 ]
 format = [
     "black>=24,<25",

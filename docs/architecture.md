@@ -107,9 +107,9 @@ _01_main.main()
 ```
 
 Discovery runs once during composition to generate a flat `StartProgram_...` method for each program. The root also exposes dynamic `ListPrograms`,
-`LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram` methods. A generated start method applies the gateway's load-then-play policy through
-qualified Dashboard package calls, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter; the
-declarative server polls it and publishes changes. The parameter interface remains empty until the RTDE invocation contract is implemented.
+`LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram` methods. A generated start method binds the reusable Dashboard `load_and_play_program()`
+operation, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter; the declarative server
+polls it and publishes changes. The parameter interface remains empty until the RTDE invocation contract is implemented.
 
 The main module enters the plain asyncua server context and waits for `SIGINT` or `SIGTERM`. Asyncua owns server startup and shutdown; the package's daemon
 polling thread follows the lifetime of asyncua's thread loop.

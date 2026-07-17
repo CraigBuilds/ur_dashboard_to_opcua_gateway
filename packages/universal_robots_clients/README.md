@@ -8,8 +8,7 @@ import universal_robots_clients.program_discovery as program_discovery
 import universal_robots_clients.rtde as rtde
 
 programs = program_discovery.discover_programs("local", "/programs")
-dashboard.load_program("192.0.2.10", programs[0])
-dashboard.play_program("192.0.2.10")
+dashboard.load_and_play_program("192.0.2.10", programs[0])
 
 client = rtde.connect("192.0.2.10")
 try:

@@ -292,8 +292,8 @@ setters. The remaining extraction work is invocation design, release hardening, 
 ### Dashboard module
 
 The implemented Dashboard module is a standalone capability within `universal_robots_clients`. It exposes protocol-accurate operations including
-`load_program()`, `play_program()`, `pause_program()`, `stop_program()`, and `get_program_state()`. The gateway adapts those operations into its lifecycle
-vocabulary and combines them with RTDE.
+`load_program()`, `play_program()`, `load_and_play_program()`, `pause_program()`, `stop_program()`, and `get_program_state()`. The gateway binds those
+operations directly into its OPC UA interface and can combine them with RTDE-backed behavior.
 
 The module does not depend on RTDE, invocation schemas, OPC UA, or program discovery. This preserves its value for scripts and projects that need only the
 Dashboard Server.

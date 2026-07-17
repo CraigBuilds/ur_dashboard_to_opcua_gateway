@@ -1,12 +1,13 @@
 """Send focused commands to a Universal Robots Dashboard Server.
 
-Each public operation opens one TCP connection, verifies the Dashboard greeting, sends exactly one newline-terminated command, reads one response, and closes
-the connection. Connection-per-command behavior keeps this first API stateless and makes failures local to one operation. Responses remain stripped text
-because Dashboard commands use different textual success and failure conventions that should not be hidden behind premature result types.
+Each protocol command opens one TCP connection, verifies the Dashboard greeting, sends exactly one newline-terminated command, reads one response, and closes
+the connection. ``load_and_play_program()`` composes two of those command operations. Connection-per-command behavior keeps this first API stateless and makes
+failures local to one exchange. Responses remain stripped text because Dashboard commands use different textual success and failure conventions that should
+not be hidden behind premature result types.
 
-The public API contains ``send_command()`` plus named program lifecycle operations: ``load_program()``, ``play_program()``, ``pause_program()``,
-``stop_program()``, and ``get_program_state()``. All accept ordinary endpoint values and are reusable without gateway configuration objects. Protocol framing
-and command validation remain private.
+The public API contains ``send_command()`` plus named program lifecycle operations: ``load_program()``, ``play_program()``, ``load_and_play_program()``,
+``pause_program()``, ``stop_program()``, and ``get_program_state()``. All accept ordinary endpoint values and are reusable without gateway configuration
+objects. Protocol framing and command validation remain private.
 
 This module depends only on the standard-library ``socket`` and ``typing`` modules. It does not import program discovery, RTDE, OPC UA, or application policy.
 """
@@ -14,7 +15,7 @@ This module depends only on the standard-library ``socket`` and ``typing`` modul
 import socket
 import typing
 
-__all__ = ["get_program_state", "load_program", "pause_program", "play_program", "send_command", "stop_program"]
+__all__ = ["get_program_state", "load_and_play_program", "load_program", "pause_program", "play_program", "send_command", "stop_program"]
 
 DEFAULT_PORT = 29999
 DEFAULT_TIMEOUT = 5.0
@@ -75,6 +76,16 @@ def play_program(host: str, port: int = DEFAULT_PORT, timeout: float = DEFAULT_T
     Used by applications that compose program invocation, including ``ur_dashboard_to_opcua_gateway``.
     """
     return send_command(host, "play", port, timeout)
+
+
+def load_and_play_program(host: str, program: str, port: int = DEFAULT_PORT, timeout: float = DEFAULT_TIMEOUT) -> str:
+    """Load one program, play it, and return the play response.
+
+    Used by applications that expose one convenient operation per program, including ``ur_dashboard_to_opcua_gateway``.
+    """
+    load_program(host, program, port, timeout)
+
+    return play_program(host, port, timeout)
 
 
 def pause_program(host: str, port: int = DEFAULT_PORT, timeout: float = DEFAULT_TIMEOUT) -> str:

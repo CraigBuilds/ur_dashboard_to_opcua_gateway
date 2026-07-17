@@ -14,6 +14,7 @@
 
 - Load a named program.
 - Start the loaded program.
+- Load and start a named program through one convenience operation.
 - Pause the running program.
 - Stop the active program.
 - Read the current program state.

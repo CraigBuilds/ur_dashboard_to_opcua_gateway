@@ -147,6 +147,7 @@ The public API is:
 send_command
 load_program
 play_program
+load_and_play_program
 pause_program
 stop_program
 get_program_state
@@ -154,9 +155,10 @@ get_program_state
 
 Functions accept direct host, port, timeout, and operation values. Each command validates line framing, opens one connection, verifies the greeting, sends one
 command, reads one response, and closes the connection. Raw response strings remain deliberate until command-specific success and failure semantics are
-designed.
+designed. `load_and_play_program()` is the reusable sequential convenience operation used by generated gateway methods; it deliberately does not interpret the
+load response yet.
 
-The module knows nothing about `Args`, discovery, RTDE, OPC UA, program method naming, load-plus-play policy, or process lifecycle.
+The module knows nothing about `Args`, discovery, RTDE, OPC UA, program method naming, or process lifecycle.
 
 ### Program-discovery module
 
@@ -208,7 +210,7 @@ The application still owns meaningful behavior:
 - Bind robot endpoints to reusable functions.
 - Discover programs during composition.
 - Generate deterministic flat `StartProgram_...` names.
-- Define load-then-play invocation behavior.
+- Bind the reusable load-and-play operation to each generated program method.
 - Add generic list, load, run, pause, and stop methods.
 - Select which getter is published as `ProgramState`.
 - Supply the `UR20` root, namespace, and endpoint.

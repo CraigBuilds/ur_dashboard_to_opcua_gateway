@@ -125,11 +125,14 @@ def test_named_dashboard_operations_format_commands(monkeypatch: pytest.MonkeyPa
 
     assert dashboard.load_program("robot", "Main.urp", 30000, 2.5) == "load Main.urp"
     assert dashboard.play_program("robot", 30000, 2.5) == "play"
+    assert dashboard.load_and_play_program("robot", "Production/Pick.urp", 30000, 2.5) == "play"
     assert dashboard.pause_program("robot", 30000, 2.5) == "pause"
     assert dashboard.stop_program("robot", 30000, 2.5) == "stop"
     assert dashboard.get_program_state("robot", 30000, 2.5) == "programState"
     assert calls == [
         ("robot", "load Main.urp", 30000, 2.5),
+        ("robot", "play", 30000, 2.5),
+        ("robot", "load Production/Pick.urp", 30000, 2.5),
         ("robot", "play", 30000, 2.5),
         ("robot", "pause", 30000, 2.5),
         ("robot", "stop", 30000, 2.5),

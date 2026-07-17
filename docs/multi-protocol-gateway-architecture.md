@@ -305,8 +305,8 @@ Robots distribution and materially affects the eventual OPC UA package.
 ### Dashboard module
 
 The Dashboard module remains a strong standalone capability within `universal_robots_clients`. It should expose protocol-accurate operations such as
-`load_program()`, `play_program()`,
-`pause_program()`, `stop_program()`, and `get_program_state()`. The gateway adapts those operations into its lifecycle vocabulary and combines them with RTDE.
+`load_program()`, `play_program()`, `pause_program()`, `stop_program()`, and `get_program_state()`. The gateway adapts those operations into its lifecycle
+vocabulary and combines them with RTDE.
 
 The module should not depend on RTDE, invocation schemas, OPC UA, or program discovery. This preserves its value for scripts and projects that need only the
 Dashboard Server.
@@ -356,8 +356,8 @@ Responsibilities:
 ```
 
 It should begin inside the gateway. Moving it immediately would force a public API before the register contract, invocation state machine, and robot-side
-program conventions are proven. Once stable, the module may own generic register and connection behavior, while commit semantics, acknowledgement workflow,
-and task policy remain in the gateway coordinator.
+program conventions are proven. Once stable, the module may own generic register and connection behavior, while commit semantics, acknowledgement workflow, and
+task policy remain in the gateway coordinator.
 
 ### What remains in the gateway
 
@@ -525,9 +525,9 @@ the gateway product.
 
 ## Recommendation
 
-Adopt the capability-based multi-protocol architecture and prove Dashboard plus RTDE inside this gateway. Extract Dashboard and program discovery into
-separate modules of `universal_robots_clients`; keep RTDE local until its reusable contract is proven, then add it to the same distribution. Delay the OPC UA
-package until parameterized invocation demonstrates the node model it actually needs.
+Adopt the capability-based multi-protocol architecture and prove Dashboard plus RTDE inside this gateway. Extract Dashboard and program discovery into separate
+modules of `universal_robots_clients`; keep RTDE local until its reusable contract is proven, then add it to the same distribution. Delay the OPC UA package
+until parameterized invocation demonstrates the node model it actually needs.
 
 This approach keeps the current modularity, avoids coupling OPC UA clients to robot protocol details, and lets the product grow from a Dashboard bridge into a
 general UR robot integration gateway without turning every internal abstraction into a package prematurely.

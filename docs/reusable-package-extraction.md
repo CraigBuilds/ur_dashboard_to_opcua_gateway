@@ -61,8 +61,8 @@ Within `universal_robots_clients`, the `dashboard`, `program_discovery`, and `rt
 only for conventions that genuinely repeat, such as endpoint data or common connection errors. The package should not introduce one stateful client that opens
 and owns all three protocols because their connection and resource lifecycles are materially different.
 
-The gateway should retain end-to-end tests across the installed distributions. Passing each distribution's unit tests is necessary but does not prove that
-their released versions compose correctly.
+The gateway should retain end-to-end tests across the installed distributions. Passing each distribution's unit tests is necessary but does not prove that their
+released versions compose correctly.
 
 ## Generic OPC UA method server
 
@@ -359,8 +359,8 @@ It should expose protocol capabilities, not gateway task policy. Invocation iden
 workflow state remain in the gateway's protocol-neutral coordinator.
 
 The final API should be designed after deciding whether to use the official RTDE Python client, `ur_rtde`, or another maintained implementation. If a
-third-party library already provides the required behavior, this module should add only a small, useful facade or compatibility layer; it should not
-reimplement RTDE or hide a capable dependency behind a narrower API without a concrete benefit.
+third-party library already provides the required behavior, this module should add only a small, useful facade or compatibility layer; it should not reimplement
+RTDE or hide a capable dependency behind a narrower API without a concrete benefit.
 
 ### Distribution structure and dependencies
 
@@ -541,9 +541,9 @@ The gateway should use bounded dependency ranges and a repeatable lock or constr
 reuse, but they also introduce compatibility management that does not exist when all modules share one version.
 
 Publishing Dashboard, program discovery, and RTDE together means they share one version and repository. That is a reasonable trade because they serve the same
-users and avoids three sets of release metadata, documentation sites, and compatibility ranges. It also means a change to any module releases the
-distribution, so CI must test the base installation plus the `sftp`, `rtde`, and `all` extras. Optional dependencies prevent that shared release unit from
-becoming a mandatory install of every transport.
+users and avoids three sets of release metadata, documentation sites, and compatibility ranges. It also means a change to any module releases the distribution,
+so CI must test the base installation plus the `sftp`, `rtde`, and `all` extras. Optional dependencies prevent that shared release unit from becoming a
+mandatory install of every transport.
 
 During development, package extraction can proceed without immediately publishing production releases:
 

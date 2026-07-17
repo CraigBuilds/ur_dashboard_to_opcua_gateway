@@ -6,6 +6,7 @@ import typing
 import xml.etree.ElementTree
 
 import pytest
+import universal_robots_clients.program_discovery as program_discovery
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
@@ -20,9 +21,7 @@ def test_local_catalogue(tmp_path: pathlib.Path) -> None:
     (tmp_path / "Main.urp").touch()
     (nested / "Pick.URP").touch()
     (tmp_path / "notes.txt").touch()
-    args = parse_command_line_args.Args(catalog="local", programs_folder=str(tmp_path))
-
-    assert compose_gateway._discover_programs(args) == ["Main.urp", "Production/Pick.URP"]
+    assert program_discovery.discover_programs("local", tmp_path) == ["Main.urp", "Production/Pick.URP"]
 
 
 def test_local_command_line_args() -> None:
@@ -54,7 +53,7 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
 
         return server
 
-    monkeypatch.setattr(compose_gateway, "_discover_programs", lambda actual: ["Main.urp"])
+    monkeypatch.setattr(compose_gateway.program_discovery, "discover_programs", lambda *arguments: ["Main.urp"])
     monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", create_server)
 
     result = compose_gateway.compose_gateway(args)
@@ -62,14 +61,21 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
     assert result is server
     assert set(typing.cast(typing.Dict[str, object], captured["status_interface"])) == {"ProgramState"}
     assert captured["parameter_interface"] == {}
-    assert set(typing.cast(typing.Dict[str, object], captured["method_interface"])) == {"StartProgram_Main", "PauseProgram", "StopProgram"}
+    assert set(typing.cast(typing.Dict[str, object], captured["method_interface"])) == {
+        "ListPrograms",
+        "LoadProgram",
+        "RunProgram",
+        "PauseProgram",
+        "StopProgram",
+        "StartProgram_Main",
+    }
     assert captured["endpoint"] == args.opcua_endpoint
     assert captured["namespace"] == compose_gateway.OPC_NAMESPACE
     assert captured["root_object"] == "UR20"
 
 
 def test_main_owns_process_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Parse, compose, and run the managed server from the executable entry point."""
+    """Parse, compose, and run the plain asyncua server from the executable entry point."""
     args = parse_command_line_args.Args(catalog="local")
     server = object()
     started: typing.List[object] = []

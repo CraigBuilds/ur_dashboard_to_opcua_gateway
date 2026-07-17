@@ -186,7 +186,7 @@ def _install_dependencies(python: pathlib.Path, repository: pathlib.Path) -> Non
         robot_clients_package = _copy_project_for_install(repository / "packages" / "universal_robots_clients", destination)
         gateway_package = _copy_project_for_install(repository / "code", destination)
         _run([str(python), "-m", "pip", "install", str(opcua_package)], repository)
-        _run([str(python), "-m", "pip", "install", f"{robot_clients_package}[sftp]"], repository)
+        _run([str(python), "-m", "pip", "install", f"{robot_clients_package}[sftp,rtde]"], repository)
         _run([str(python), "-m", "pip", "install", f"{gateway_package}[system-test]"], repository)
 
 

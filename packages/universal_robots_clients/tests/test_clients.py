@@ -23,6 +23,34 @@ def test_local_discovery_filters_relativizes_and_sorts(tmp_path: pathlib.Path) -
     assert program_discovery.discover_local_programs(tmp_path) == ["Main.urp", "Production/Pick.URP"]
 
 
+def test_discovery_selector_delegates_to_local_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Select local discovery through the package's configuration-oriented operation."""
+    discover = unittest.mock.MagicMock(return_value=["Main.urp"])
+    monkeypatch.setattr(program_discovery, "discover_local_programs", discover)
+
+    assert program_discovery.discover_programs("local", "/programs") == ["Main.urp"]
+    discover.assert_called_once_with("/programs")
+
+
+def test_discovery_selector_delegates_to_sftp_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Forward all connection settings through the package's SFTP selection."""
+    discover = unittest.mock.MagicMock(return_value=["Main.urp"])
+    monkeypatch.setattr(program_discovery, "discover_programs_over_sftp", discover)
+
+    programs = program_discovery.discover_programs(
+        "sftp", "/programs", host="robot", username="operator", password="secret", port=2222, timeout=2.5, trust_unknown_host_keys=True
+    )
+
+    assert programs == ["Main.urp"]
+    discover.assert_called_once_with("robot", "/programs", "operator", "secret", 2222, 2.5, True)
+
+
+def test_discovery_selector_rejects_unknown_backend() -> None:
+    """Reject a backend name outside the package's supported choices."""
+    with pytest.raises(ValueError, match="Unsupported program-discovery backend"):
+        program_discovery.discover_programs("unknown", "/programs")
+
+
 def test_connected_sftp_discovery_recurses_without_owning_the_client() -> None:
     """Traverse a caller-owned SFTP client and normalize discovered paths."""
     sftp = unittest.mock.MagicMock()

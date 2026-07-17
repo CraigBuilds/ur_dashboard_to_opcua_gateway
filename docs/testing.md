@@ -18,7 +18,7 @@ Install the local distributions and development tools from the repository root:
 
 ```bash
 python -m pip install -e "./packages/declarative_opcua_server[test]"
-python -m pip install -e "./packages/universal_robots_clients[sftp,test]"
+python -m pip install -e "./packages/universal_robots_clients[sftp,rtde,test]"
 python -m pip install -e "./code[sftp,test,format]"
 ```
 
@@ -42,18 +42,20 @@ The non-container suite supports Python 3.8.3 and later. CI runs it on Python 3.
 
 The non-container tests cover:
 
-- Declarative status polling, scalar and list values, parameter writes, methods, partial signatures, lifecycle, and flat-interface validation through a real OPC
-  UA client.
+- Declarative status polling, scalar and list values, parameter writes, typed method inputs/results, partial signatures, plain-server lifecycle, and
+  flat-interface validation through a real OPC UA client.
 - Dashboard line injection, greeting and response framing, endpoint forwarding, and exact named command construction.
-- Local and caller-owned SFTP traversal, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
+- Local and caller-owned SFTP traversal, backend selection, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
+- RTDE connection configuration, cleanup, connection health, reconnection, register ranges, typed reads, typed writes, and rejected writes with deterministic
+  fakes.
 - Command-line defaults, overrides, credentials, validation, and package delegation.
-- Flat per-program method naming, collision detection, load-before-play policy, controller methods, and status composition.
-- OPC UA application identity forwarding, composition-root wiring, signal handling, and clean managed-server shutdown.
+- Flat per-program method naming, collision detection, generic discovery/control methods, load-before-play policy, controller methods, and status composition.
+- OPC UA application identity forwarding, composition-root wiring, signal handling, and clean plain-server shutdown.
 - Reproducible no-motion URP fixtures and system-test runner argument handling.
 - Module docstrings, parser help, namespace imports, documented public consumers, and dataclass-only production classes.
 
 Planned reliability tests include callback failure status mapping, port binding, polling failures, Dashboard timeouts, failed load responses, concurrent robot
-operations, and RTDE disconnect behavior.
+operations, and RTDE interruption during an active invocation.
 
 ## System tests
 
@@ -87,9 +89,9 @@ Install and collect without Docker:
 python tests/system/run.py --collect-only
 ```
 
-For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, verifies the discovered program methods, observes a
-polled Dashboard state, starts `Main.urp`, pauses and stops it, starts `Production/PickPart.urp`, and confirms the loaded and playing state directly through
-URSim.
+For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, lists programs, loads and runs a selected program
+through generic methods, invokes generated program start methods, pauses and stops execution, and confirms loaded and playing state directly through URSim. A
+separate system contract connects the reusable RTDE client to the same URSim instance and exercises typed input/output register access.
 
 The local arrangement mounts programs and shares the URSim network namespace. The SFTP arrangement uses a private Docker network containing the gateway, URSim,
 and OpenSSH. The same OPC UA contract must pass in both cases.

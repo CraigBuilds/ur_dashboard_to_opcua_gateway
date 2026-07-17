@@ -5,8 +5,9 @@
 ## Current MVP
 
 - Discover `.urp` programs recursively from a local directory or SFTP.
+- List programs and load any selected program through generic OPC UA methods.
+- Run, pause, or stop the currently loaded robot program.
 - Create one no-argument start method for every program discovered at startup.
-- Pause or stop the active robot program.
 - Poll and publish the current Dashboard program state.
 - Run as an installed command or container.
 
@@ -19,13 +20,18 @@ Objects/
             ProgramState
         Parameters/
         Methods/
+            ListPrograms() -> String[]
+            LoadProgram(program: String) -> String
+            RunProgram() -> String
+            PauseProgram() -> String
+            StopProgram() -> String
             StartProgram_Main()
             StartProgram_Production_PickPart()
-            PauseProgram()
-            StopProgram()
 ```
 
-`Parameters` is empty until the RTDE parameter contract is implemented. See [features](docs/features.md) for current limitations and planned additions.
+The generic methods support discovery and low-level lifecycle control, while each generated `StartProgram_...()` method provides a convenient load-then-run
+operation. `Parameters` is empty until the RTDE invocation contract is implemented. See [features](docs/features.md) for current limitations and planned
+additions.
 
 ## Repository
 
@@ -67,13 +73,14 @@ python -m pip install -e ./code
 Install SFTP and development dependencies:
 
 ```bash
-python -m pip install -e "./packages/universal_robots_clients[sftp,test]"
+python -m pip install -e "./packages/universal_robots_clients[sftp,rtde,test]"
 python -m pip install -e "./packages/declarative_opcua_server[test]"
 python -m pip install -e "./code[sftp,test,format]"
 ```
 
 Python 3.8.3 or later is supported. `declarative-opcua-server` selects `asyncua` 1.1.5 on Python 3.8 and 3.9 and `asyncua` 2.0.1 on Python 3.10 and later.
-Paramiko belongs to the optional `universal-robots-clients[sftp]` extra and is imported only for SFTP connection setup.
+Paramiko belongs to the optional `universal-robots-clients[sftp]` extra and is imported only for SFTP connection setup. The optional
+`universal-robots-clients[rtde]` extra installs `ur-rtde`; RTDE connections are created only when its API is called.
 
 When the packages are published externally, the gateway dependency declarations can resolve them from the package index and the first two local installation
 commands will no longer be necessary.
@@ -144,7 +151,8 @@ python tests/system/run.py
 ```
 
 The runner installs all three distributions into an isolated environment, builds the gateway image from the repository root, and verifies local and SFTP
-discovery through a real OPC UA client and URSim Dashboard Server. See [testing](docs/testing.md) for focused commands and requirements.
+discovery, both OPC UA control styles, Dashboard execution, and RTDE register access against URSim. See [testing](docs/testing.md) for focused commands and
+requirements.
 
 ## Formatting
 

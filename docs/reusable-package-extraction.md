@@ -17,13 +17,13 @@ package index or moved to external repositories.
 
 The gateway combines three reusable technical capabilities with product-specific policy:
 
-| Capability                         | Owner                                        | Status                    |
-| ---------------------------------- | -------------------------------------------- | ------------------------- |
-| Declarative OPC UA exposure        | `declarative_opcua_server`                   | Implemented locally       |
-| Dashboard protocol operations      | `universal_robots_clients.dashboard`         | Implemented locally       |
-| Local and SFTP URP discovery       | `universal_robots_clients.program_discovery` | Implemented locally       |
-| RTDE connection and register I/O   | `universal_robots_clients.rtde`              | Planned after prototyping |
-| Program invocation and task policy | Gateway application                          | Planned                   |
+| Capability                         | Owner                                        | Status              |
+| ---------------------------------- | -------------------------------------------- | ------------------- |
+| Declarative OPC UA exposure        | `declarative_opcua_server`                   | Implemented locally |
+| Dashboard protocol operations      | `universal_robots_clients.dashboard`         | Implemented locally |
+| Local and SFTP URP discovery       | `universal_robots_clients.program_discovery` | Implemented locally |
+| RTDE connection and register I/O   | `universal_robots_clients.rtde`              | Implemented locally |
+| Program invocation and task policy | Gateway application                          | Planned             |
 
 The two distributions do not depend on one another. The Universal Robots modules also do not import one another. Only the gateway knows that discovered programs
 become Dashboard-backed OPC UA methods.
@@ -70,7 +70,8 @@ The selected interface defines a function's role:
 
 - A status function accepts no arguments and declares a supported return type. The package polls it and publishes changed values through a read-only variable.
 - A parameter function accepts one annotated argument and returns no value. An OPC UA client write invokes it before the value is retained.
-- A method function accepts no arguments and returns no value. An OPC UA method call invokes it.
+- A method function exposes its required annotated arguments as OPC UA inputs and its annotated return as an optional output. Defaulted arguments are treated as
+  bound application configuration rather than client inputs.
 
 There is no generic `data_interface`, descriptor hierarchy, `Folder`, `Object`, `Method`, `Variable`, `set_output()`, or caller-managed node handle API.
 
@@ -102,7 +103,7 @@ The package owns:
 - Method callback adaptation.
 - Status polling and subscription-visible updates.
 - Parameter write interception.
-- Managed startup and shutdown of asyncua and polling resources.
+- A plain, unstarted `asyncua.sync.Server` with status polling tied to asyncua's thread-loop lifetime.
 - Opinionated loopback, namespace, root, anonymous, and `NoSecurity` defaults.
 
 It does not own:
@@ -111,7 +112,7 @@ It does not own:
 - Nested address-space schemas or arbitrary OPC UA node classes.
 - Task manifests, invocation IDs, register mappings, or workflow state.
 - Process signals, command-line parsing, or application logging policy.
-- Certificates and authenticated security policies in version 0.1.
+- Certificates and authenticated security policies in the current package.
 
 Applications requiring arbitrary address spaces should use asyncua directly. This package is intentionally not a competing general OPC UA framework.
 
@@ -162,49 +163,60 @@ The module knows nothing about `Args`, discovery, RTDE, OPC UA, program method n
 The public API is:
 
 ```text
+discover_programs
 discover_local_programs
 discover_sftp_programs
 discover_programs_over_sftp
 ```
 
-Both traversal paths find case-insensitive `.urp` files recursively, normalize relative paths, and sort results. The lowest-level SFTP function accepts a
-caller-owned connected client. The convenience function owns a short Paramiko connection and requires unknown-host-key trust to be selected explicitly. Paramiko
+Both traversal paths find case-insensitive `.urp` files recursively, normalize relative paths, and sort results. `discover_programs()` selects local or SFTP
+operation from one backend argument, allowing configured applications to call the package directly. The lowest-level SFTP function accepts a caller-owned
+connected client. The connection convenience function owns a short Paramiko connection and requires unknown-host-key trust to be selected explicitly. Paramiko
 belongs to the optional `sftp` extra and is imported only by that convenience function.
 
-The gateway remains responsible for environment-variable passwords, prompts, backend selection, and its current decision to trust unknown keys.
+The gateway remains responsible for environment-variable passwords, prompts, and its current decision to trust unknown keys.
 
 ### RTDE module
 
-There is no placeholder RTDE implementation. A future `universal_robots_clients.rtde` module should be added only after selecting a maintained RTDE dependency
-and proving these contracts against URSim:
+The implemented `universal_robots_clients.rtde` module loads the optional `ur-rtde` dependency only when connecting. Its public functional API is:
 
-- Connection negotiation, recipe setup, and shutdown.
-- Persistent receive lifecycle and thread-safety.
-- Typed status getters suitable for `status_interface`.
-- Typed register setters suitable for `parameter_interface`.
-- Timeouts, disconnection, reconnect, and controller compatibility.
+```text
+Client
+connect
+disconnect
+is_connected
+reconnect
+read_output_int_register
+read_output_double_register
+write_input_int_register
+write_input_double_register
+```
 
-The package will own protocol mechanics. The gateway will continue to own task schemas, register allocation, commit and acknowledgement rules, invocation
-serialization, and execution strategy.
+`Client` is a frozen data class that owns the two persistent `ur-rtde` interfaces and a lock; all behavior remains in module functions. The default upper
+register range is intended for external RTDE clients, with lower registers available explicitly. Unit tests cover configuration, lifecycle, reconnection,
+ranges, and typed reads/writes, while the system suite verifies the contract against URSim.
+
+The package owns protocol mechanics. The gateway continues to own task schemas, register allocation, commit and acknowledgement rules, invocation serialization,
+and execution strategy. Those application-level parameter features are not implemented yet.
 
 ## Remaining gateway policy
 
 The application still owns meaningful behavior:
 
 - Parse all product configuration into `Args`.
-- Select local or SFTP discovery.
+- Configure local or SFTP discovery through the package's selector.
 - Bind robot endpoints to reusable functions.
 - Discover programs during composition.
 - Generate deterministic flat `StartProgram_...` names.
 - Define load-then-play invocation behavior.
-- Add controller-wide pause and stop methods.
+- Add generic list, load, run, pause, and stop methods.
 - Select which getter is published as `ProgramState`.
 - Supply the `UR20` root, namespace, and endpoint.
 - Own process signals and the complete system test.
 
-RTDE will add product-specific task schemas, parameter mappings, and resource composition rather than moving those decisions into either reusable package. These
-current policies fit together in `_03_compose_gateway`; another application module should be introduced only when a future policy or long-lived resource has
-enough independent behavior to justify its own tests and lifecycle boundary.
+RTDE invocation support will add product-specific task schemas, parameter mappings, and resource composition rather than moving those decisions into either
+reusable package. These current policies fit together in `_03_compose_gateway`; another application module should be introduced only when a future policy or
+long-lived resource has enough independent behavior to justify its own tests and lifecycle boundary.
 
 ## Local development and release path
 
@@ -212,13 +224,13 @@ The monorepo currently installs the package projects first:
 
 ```bash
 python -m pip install -e ./packages/declarative_opcua_server
-python -m pip install -e "./packages/universal_robots_clients[sftp]"
-python -m pip install -e "./code[sftp]"
+python -m pip install -e "./packages/universal_robots_clients[sftp,rtde]"
+python -m pip install -e "./code[sftp,system-test]"
 ```
 
 The next extraction steps are:
 
-1. Complete each version 0.1 failure and build contract.
+1. Complete each package's remaining failure and build contracts.
 1. Build wheels and source distributions and install them in clean test environments.
 1. Run the gateway's Python 3.8, Python 3.12, and URSim suites against those artifacts.
 1. Check distribution and repository names immediately before publication.

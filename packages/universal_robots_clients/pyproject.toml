@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "universal-robots-clients"
-version = "0.1.0"
+version = "0.2.0"
 description = "Focused Python clients for Universal Robots controllers and program assets"
 readme = "README.md"
 requires-python = ">=3.8.3"
@@ -14,11 +14,15 @@ dependencies = []
 sftp = [
     "paramiko>=3.5,<4",
 ]
+rtde = [
+    "ur-rtde==1.6.3",
+]
 test = [
     "pytest>=8,<10",
 ]
 all = [
     "paramiko>=3.5,<4",
+    "ur-rtde==1.6.3",
 ]
 
 [tool.setuptools.packages.find]

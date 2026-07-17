@@ -42,7 +42,7 @@ def _wait_for_value(node: asyncua.sync.SyncNode, expected: object) -> None:
 
 def test_interfaces_work_through_a_real_opcua_client() -> None:
     """Poll status, forward parameter writes, and invoke methods through OPC UA."""
-    state: typing.Dict[str, object] = {"voltage": 24.0, "pose": [1.0, 2.0], "height": None, "started": False}
+    state: typing.Dict[str, object] = {"voltage": 24.0, "pose": [1.0, 2.0], "height": None, "started": False, "loaded": None}
 
     def read_voltage() -> float:
         """Read the simulated status value."""
@@ -60,16 +60,27 @@ def test_interfaces_work_through_a_real_opcua_client() -> None:
         """Run one simulated method."""
         state["started"] = True
 
+    def load(program: str) -> str:
+        """Load one named simulated program."""
+        state["loaded"] = program
+
+        return f"Loaded {program}"
+
+    def list_programs() -> typing.List[str]:
+        """List simulated programs."""
+        return ["Main.urp", "Pick.urp"]
+
     endpoint = _endpoint()
     namespace_uri = "urn:declarative-opcua-server:test"
     server = declarative_opcua_server.create_server(
         status_interface={"ToolVoltage": read_voltage, "TcpPose": read_pose},
         parameter_interface={"TargetHeight": write_height},
-        method_interface={"StartRoutine": start},
+        method_interface={"StartRoutine": start, "LoadProgram": load, "ListPrograms": list_programs},
         endpoint=endpoint,
         namespace=namespace_uri,
         root_object="TestApplication",
     )
+    assert type(server) is asyncua.sync.Server
 
     with server:
         with asyncua.sync.Client(endpoint) as client:
@@ -82,6 +93,8 @@ def test_interfaces_work_through_a_real_opcua_client() -> None:
             pose = _child(status, namespace, "TcpPose")
             height = _child(parameters, namespace, "TargetHeight")
             start_method = _child(methods, namespace, "StartRoutine")
+            load_method = _child(methods, namespace, "LoadProgram")
+            list_method = _child(methods, namespace, "ListPrograms")
             _wait_for_value(voltage, 24.0)
             _wait_for_value(pose, [1.0, 2.0])
             state["voltage"] = 48.0
@@ -90,9 +103,12 @@ def test_interfaces_work_through_a_real_opcua_client() -> None:
             _wait_for_value(pose, [1.0, 2.0, 3.0])
             height.write_value(125)
             methods.call_method(start_method)
+            assert methods.call_method(load_method, "Main.urp") == "Loaded Main.urp"
+            assert methods.call_method(list_method) == ["Main.urp", "Pick.urp"]
 
     assert state["height"] == 125
     assert state["started"] is True
+    assert state["loaded"] == "Main.urp"
 
 
 def test_partial_signatures_and_supported_scalar_types_are_resolved() -> None:
@@ -124,7 +140,7 @@ def test_partial_signatures_and_supported_scalar_types_are_resolved() -> None:
         (({"Bad": lambda value: value}, {}, {}), "must accept no arguments"),
         (({"Bad": lambda: None}, {}, {}), "must declare a return type"),
         (({}, {"Bad": lambda: None}, {}), "exactly one argument"),
-        (({}, {}, {"Bad": lambda value: None}), "must accept no arguments"),
+        (({}, {}, {"Bad": lambda value: None}), "must annotate argument"),
     ],
 )
 def test_invalid_interface_signatures_fail_during_creation(interfaces: typing.Tuple[typing.Dict[str, typing.Callable[..., object]], ...], message: str) -> None:

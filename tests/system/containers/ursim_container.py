@@ -15,6 +15,7 @@ URSIM_IMAGE = "universalrobots/ursim_e-series:5.25.2"
 URSIM_PROGRAMS = "/ursim/programs.UR20"
 DASHBOARD_PORT = 29999
 OPCUA_PORT = 4840
+RTDE_PORT = 30004
 START_TIMEOUT = 240.0
 ROBOT_TIMEOUT = 90.0
 
@@ -33,6 +34,7 @@ class UrSimContainer:
             network=network,
             network_aliases=["ursim"],
         )
+        container.with_bind_ports(RTDE_PORT, RTDE_PORT)
         self._container = container
 
     @property

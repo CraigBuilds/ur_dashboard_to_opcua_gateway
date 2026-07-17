@@ -11,6 +11,7 @@ ur_dashboard_to_opcua_gateway
     +-- universal-robots-clients
             +-- Python standard library
             +-- paramiko [optional SFTP extra]
+            +-- ur-rtde [optional RTDE extra]
 ```
 
 The two package projects do not depend on one another. The gateway is a deliberately small product-specific composition layer that combines their public
@@ -52,12 +53,13 @@ Its fixed address space is:
 Application/
     Status/       typed zero-argument getters, polled and read-only
     Parameters/   typed one-argument setters, writable by clients
-    Methods/      zero-argument, no-result commands
+    Methods/      typed functions exposed as OPC UA methods
 ```
 
-Function annotations map `bool`, `int`, `float`, `str`, `bytes`, and homogeneous `typing.List` values to OPC UA types. The package validates every interface
-before allocating an asyncua server, adapts method callbacks, intercepts parameter writes, publishes changed status values, and owns polling shutdown. It does
-not know about robots, application schemas, or process signals.
+Function annotations map `bool`, `int`, `float`, `str`, `bytes`, and homogeneous `typing.List` values to OPC UA types. Required annotated method arguments
+become OPC UA inputs, and an annotated return becomes an output. The package validates every interface before allocating and returning a plain
+`asyncua.sync.Server`, adapts method callbacks, intercepts parameter writes, and publishes changed status values. It does not know about robots, application
+schemas, or process signals.
 
 ### universal-robots-clients
 
@@ -68,9 +70,9 @@ import universal_robots_clients.dashboard as dashboard
 import universal_robots_clients.program_discovery as program_discovery
 ```
 
-`dashboard` owns TCP framing, validation, and named Dashboard operations. `program_discovery` owns local and caller-owned SFTP traversal plus an optional
-Paramiko connection convenience function. The modules do not import one another. A real `rtde` module will be added only after its dependency, connection
-lifecycle, and register contract are proven.
+`dashboard` owns TCP framing, validation, and named Dashboard operations. `program_discovery` owns backend selection, local and caller-owned SFTP traversal,
+plus an optional Paramiko connection convenience function. `rtde` owns an optional `ur-rtde` connection and typed integer/double register I/O. The modules do
+not import one another. Invocation schemas, register allocation, and commit/acknowledgement policy remain gateway concerns.
 
 ## Dependencies
 
@@ -99,17 +101,18 @@ _01_main.main()
     -> _02_parse_command_line_args.parse_args()
     -> _03_compose_gateway.compose_gateway(args)
         -> universal_robots_clients.program_discovery.*
-        -> build StartProgram_..., PauseProgram, StopProgram, and ProgramState callables
+        -> build generic control, StartProgram_..., and ProgramState callables
         -> declarative_opcua_server.create_server(...)
     -> _01_main._run_until_stopped(server)
 ```
 
-Discovery runs once during composition. The composition root uses a comprehension to create a flat `StartProgram_...` method for each program and adds
-controller-wide pause and stop methods. A start method applies the gateway's load-then-play policy through qualified Dashboard package calls. `ProgramState`
-uses the reusable Dashboard getter; the declarative server polls it and publishes changes. The parameter interface remains empty until RTDE is implemented.
+Discovery runs once during composition to generate a flat `StartProgram_...` method for each program. The root also exposes dynamic `ListPrograms`,
+`LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram` methods. A generated start method applies the gateway's load-then-play policy through
+qualified Dashboard package calls, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter; the
+declarative server polls it and publishes changes. The parameter interface remains empty until the RTDE invocation contract is implemented.
 
-The main module enters the managed server context and waits for `SIGINT` or `SIGTERM`. The declarative package starts its asyncua server and polling thread on
-entry and stops both on exit.
+The main module enters the plain asyncua server context and waits for `SIGINT` or `SIGTERM`. Asyncua owns server startup and shutdown; the package's daemon
+polling thread follows the lifetime of asyncua's thread loop.
 
 ## Public gateway API
 

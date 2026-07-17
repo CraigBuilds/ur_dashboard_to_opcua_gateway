@@ -5,8 +5,8 @@ hosting into reusable packages. It selects local or SFTP discovery from ``Args``
 flat OPC UA method names, and defines the gateway's fixed namespace and robot object name.
 
 ``compose_gateway()`` is the main public API and returns a configured, unstarted server for ``_01_main`` to own. ``OPC_NAMESPACE`` is also public because OPC UA
-clients and the system tests use it to resolve the application namespace. Discovery selection, load-then-play behavior, command-response adaptation, and method
-name generation are intentionally private application details.
+clients and the system tests use it to resolve the application namespace. Load-then-play behavior and generated method names are the only private application
+policies; backend selection and protocol operations are supplied directly by reusable package functions.
 
 The module depends on ``_02_parse_command_line_args``, ``declarative_opcua_server``, and the ``dashboard`` and ``program_discovery`` modules from
 ``universal_robots_clients``. The reusable packages remain independent of this gateway and of one another.
@@ -28,42 +28,13 @@ __all__ = ["OPC_NAMESPACE", "compose_gateway"]
 OPC_NAMESPACE = "urn:ur20:program-control"
 _ROOT_OBJECT = "UR20"
 _DASHBOARD_TIMEOUT = 5.0
-_DashboardCommand = typing.Callable[..., str]
 
 
-def _discover_programs(args: parse_command_line_args.Args) -> typing.List[str]:
-    """Discover programs through the configured reusable package operation."""
-    if args.catalog == "local":
-        return program_discovery.discover_local_programs(args.programs_folder)
-
-    if args.catalog != "sftp":
-        raise ValueError(f"Unsupported catalogue: {args.catalog}")
-
-    if args.robot_host is None:
-        raise ValueError("Robot host is required for SFTP discovery.")
-
-    if args.robot_password is None:
-        raise ValueError("Robot password is required for SFTP discovery.")
-
-    return program_discovery.discover_programs_over_sftp(
-        host=args.robot_host,
-        root=args.programs_folder,
-        username=args.sftp_username,
-        password=args.robot_password,
-        port=args.sftp_port,
-        trust_unknown_host_keys=True,
-    )
-
-
-def _run_program(args: parse_command_line_args.Args, program: str) -> None:
+def _run_program(args: parse_command_line_args.Args, program: str) -> str:
     """Load and then play one discovered program."""
     dashboard.load_program(args.dashboard_host, program, args.dashboard_port, _DASHBOARD_TIMEOUT)
-    dashboard.play_program(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
-
-def _run_command(command: _DashboardCommand, args: parse_command_line_args.Args) -> None:
-    """Expose one response-returning Dashboard operation as a no-result method."""
-    command(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
+    return dashboard.play_program(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
 
 def _program_method_name(program: str) -> str:
@@ -78,26 +49,37 @@ def _program_method_name(program: str) -> str:
     return "StartProgram_" + "_".join(meaningful)
 
 
-def _create_method_interface(args: parse_command_line_args.Args, programs: typing.Sequence[str]) -> typing.Dict[str, typing.Callable[[], None]]:
-    """Create program-specific and robot-wide OPC UA method functions."""
-    methods = {_program_method_name(program): functools.partial(_run_program, args, program) for program in programs}
-
-    if len(methods) != len(programs):
-        raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
-
-    methods["PauseProgram"] = functools.partial(_run_command, dashboard.pause_program, args)
-    methods["StopProgram"] = functools.partial(_run_command, dashboard.stop_program, args)
-
-    return methods
-
-
 def compose_gateway(args: parse_command_line_args.Args) -> typing.Any:
     """Compose the configured gateway server.
 
     Used by ``_01_main.main()``.
     """
+    discover_programs = functools.partial(
+        program_discovery.discover_programs,
+        args.catalog,
+        args.programs_folder,
+        args.robot_host,
+        args.sftp_username,
+        args.robot_password,
+        args.sftp_port,
+        program_discovery.DEFAULT_SFTP_TIMEOUT,
+        True,
+    )
+    programs = discover_programs()
+    program_methods = {_program_method_name(program): functools.partial(_run_program, args, program) for program in programs}
+
+    if len(program_methods) != len(programs):
+        raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
+
+    method_interface: typing.Dict[str, typing.Callable[..., typing.Any]] = {
+        **program_methods,
+        "ListPrograms": discover_programs,
+        "LoadProgram": functools.partial(dashboard.load_program, args.dashboard_host, port=args.dashboard_port, timeout=_DASHBOARD_TIMEOUT),
+        "RunProgram": functools.partial(dashboard.play_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+        "PauseProgram": functools.partial(dashboard.pause_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+        "StopProgram": functools.partial(dashboard.stop_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+    }
     status_interface = {"ProgramState": functools.partial(dashboard.get_program_state, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)}
-    method_interface = _create_method_interface(args, _discover_programs(args))
 
     return declarative_opcua_server.create_server(
         status_interface=status_interface,

@@ -46,6 +46,20 @@ class Args:
     dashboard_port: int = _DEFAULT_DASHBOARD_PORT
     opcua_endpoint: str = _DEFAULT_OPCUA_ENDPOINT
 
+    def __post_init__(self) -> None:
+        """Validate cross-field configuration.
+
+        Used whenever application configuration is constructed directly or through ``parse_args()``.
+        """
+        if self.catalog not in ("local", "sftp"):
+            raise ValueError(f"Unsupported catalogue: {self.catalog}")
+
+        if self.catalog == "sftp" and not self.robot_host:
+            raise ValueError("Robot host is required for SFTP discovery.")
+
+        if self.catalog == "sftp" and not self.robot_password:
+            raise ValueError("Robot password is required for SFTP discovery.")
+
 
 def _create_parser() -> argparse.ArgumentParser:
     """Create the gateway command-line parser."""

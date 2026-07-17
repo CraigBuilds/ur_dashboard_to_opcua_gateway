@@ -275,19 +275,19 @@ Parameter setters stage typed values through RTDE. A no-argument start method va
 applies the configured Dashboard or dispatcher strategy. Polled status getters report actual robot and invocation values without exposing RTDE register names.
 Controller-wide methods remain separate from task-specific start methods.
 
-The package does not currently support method arguments, nested task objects, or events. Add one of those capabilities only if a proven invocation contract
-cannot be expressed clearly through flat typed parameters, status values, and commands.
+The package supports typed method arguments and results, but not nested task objects or events. Expand the model only if a proven invocation contract cannot be
+expressed clearly through flat typed parameters, status values, and methods.
 
 ## Intersection with reusable package extraction
 
-The local extraction now contains `declarative_opcua_server` and `universal_robots_clients` as independently installable projects. Dashboard and discovery are
-already consumed through direct package APIs. The declarative package already accepts the callable shapes required by future RTDE getters and setters. The
-remaining extraction work is release hardening and external publication, not another gateway-module move.
+The local extraction now contains `declarative_opcua_server` and `universal_robots_clients` as independently installable projects. Dashboard, discovery, and
+basic RTDE register access are implemented through direct package APIs. The declarative package accepts the callable shapes required by RTDE getters and
+setters. The remaining extraction work is invocation design, release hardening, and external publication, not another gateway-module move.
 
 - `declarative_opcua_server` owns the fixed callable-to-OPC-UA adapter.
 - `universal_robots_clients.dashboard` owns lifecycle protocol functions.
 - `universal_robots_clients.program_discovery` owns filesystem and SFTP catalogue traversal.
-- A future `universal_robots_clients.rtde` will own reusable RTDE protocol access without owning invocation workflow.
+- `universal_robots_clients.rtde` owns reusable RTDE connection and register access without owning invocation workflow.
 
 ### Dashboard module
 
@@ -307,35 +307,34 @@ The `program_discovery` module does not depend on Dashboard, RTDE, or OPC UA. Pa
 
 ### OPC UA package scope
 
-The implemented `declarative_opcua_server` creates a synchronous managed server from three flat dictionaries:
+The implemented `declarative_opcua_server` creates and returns a plain synchronous asyncua server from three flat dictionaries:
 
 - Typed zero-argument getters become polled, read-only status variables.
 - Typed one-argument setters become writable parameter variables.
-- Zero-argument, no-result functions become methods.
+- Required annotated function arguments become method inputs, and an annotated return becomes an optional method output.
 
 It supports `bool`, `int`, `float`, `str`, `bytes`, and homogeneous lists through a fixed Python-to-UA map. It validates definitions before allocating asyncua
-resources and owns polling lifecycle. It does not own task schemas, invocation identifiers, staged and active snapshots, RTDE mappings, arbitrary folders,
-stable NodeIds, or event schemas. The gateway translates task policy into flat named functions before calling the package.
+resources and ties its polling thread to asyncua's thread-loop lifetime. It does not own task schemas, invocation identifiers, staged and active snapshots, RTDE
+mappings, arbitrary folders, stable NodeIds, or event schemas. The gateway translates task policy into flat named functions before calling the package.
 
 This boundary is intentionally less flexible than the earlier descriptor proposal. Applications needing arbitrary OPC UA address spaces should use asyncua
 directly rather than expanding this package into a general framework.
 
 ### RTDE module
 
-Reusable RTDE protocol access belongs in `universal_robots_clients.rtde` rather than a separate distribution:
+Reusable RTDE protocol access is implemented in `universal_robots_clients.rtde` rather than a separate distribution:
 
 ```text
 Responsibilities:
-    RTDE session and recipe lifecycle
-    versioned register layouts
-    logical value encoding and decoding
+    persistent receive and I/O connection lifecycle
+    typed integer and double register reads and writes
+    upper or lower external register-range selection
     connection health and reconnect behavior
 ```
 
-It should initially be prototyped in the gateway's composition layer, extracting another application module only when the RTDE lifecycle or invocation policy
-becomes too substantial to read clearly there. Moving an unproven implementation immediately into the package would freeze an API before the register contract,
-invocation state machine, and robot-side conventions are known. Once stable, the protocol behavior moves into `universal_robots_clients.rtde`, while commit
-semantics, acknowledgement workflow, naming, and task policy remain in the gateway.
+The module uses the optional `ur-rtde` dependency and has unit plus URSim system contracts. It deliberately stops below application policy: logical register
+allocation, staged values, atomic commit semantics, acknowledgement workflow, naming, and task policy remain in the gateway. Those concepts should be prototyped
+there before the reusable client API is expanded.
 
 ### What remains in the gateway
 
@@ -464,10 +463,10 @@ Package extraction and the multi-protocol change should continue in distinct pha
 1. Harden the locally implemented Dashboard and program-discovery package contracts and run the complete gateway suite against built artifacts.
 1. Publish both distributions externally without changing their import packages or the gateway's composition model.
 1. Define the protocol-neutral invocation state machine, task schema, flat naming rules, and capability boundaries inside the gateway.
-1. Select an RTDE dependency and prototype the persistent connection, register contract, and robot-side handshake in the gateway composition layer.
+1. Build the register allocation and robot-side handshake on the implemented `ur-rtde` client in the gateway composition layer.
 1. Generate flat status getters and parameter setters from the task schema and supply them to `declarative_opcua_server`.
 1. Add real URSim tests for parameters, commit, acknowledgement, failures, and both execution strategies.
-1. Move proven protocol mechanics into `universal_robots_clients.rtde`; retain task and workflow policy in the gateway.
+1. Expand `universal_robots_clients.rtde` only for protocol mechanics proven reusable by the gateway; retain task and workflow policy in the application.
 1. Rename the gateway after the second robot-facing protocol becomes a supported end-to-end capability.
 
 The flat OPC UA package does not need the final task catalogue before publication. It owns callable adaptation and resource lifecycle; the gateway owns what the
@@ -493,22 +492,22 @@ the gateway product.
 - The exact logical task and invocation schemas.
 - The first supported argument and result types.
 - The RTDE register allocation, protocol version, and ownership rules.
-- Whether the gateway uses an existing maintained RTDE library or a narrow local implementation.
+- Whether `ur-rtde` remains the preferred dependency after the full invocation contract is exercised operationally.
 - Robot-side acknowledgement, completion, cancellation, and error conventions.
 - Restart reconciliation and idempotency behavior.
 - Whether OPC UA invocation state uses variables, events, method results, or a combination. This affects how the gateway consumes the extracted package, not
   whether the package is extracted first.
 - Whether the first invocation release can remain within flat status, parameter, and method functions or proves a narrowly defined package extension necessary.
 - The point at which the gateway and repository are renamed.
-- The evidence required before moving the RTDE adapter into `universal_robots_clients.rtde`.
+- The evidence required before expanding `universal_robots_clients.rtde` beyond typed connection and register operations.
 
 ## Recommendation
 
 Keep the locally extracted `declarative_opcua_server` and `universal_robots_clients` distributions bounded to their implemented APIs, harden them, and publish
 them without restoring application adapter modules. The compact gateway composition root should retain task schemas and invocation coordination.
 
-Prototype Dashboard-plus-RTDE behavior in the gateway until the RTDE protocol and register contract are proven. Then move reusable protocol mechanics into a new
-`universal_robots_clients.rtde` module while leaving invocation policy in the application.
+Prototype Dashboard-plus-RTDE invocation behavior in the gateway using the existing `universal_robots_clients.rtde` transport functions. Expand that module only
+with proven reusable protocol mechanics, while leaving invocation policy in the application.
 
 This approach keeps the current package boundaries, avoids coupling OPC UA clients to robot protocol details, and lets the product grow from a Dashboard bridge
 into a general UR robot integration gateway without turning every application decision into a module or package prematurely.

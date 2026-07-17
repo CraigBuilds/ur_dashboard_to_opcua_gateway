@@ -24,6 +24,7 @@
 
 - Create fixed, flat `Status`, `Parameters`, and `Methods` folders beneath `Objects/UR20`.
 - Add one no-argument `StartProgram_...()` method for every program discovered at startup.
+- Add dynamic `ListPrograms()`, `LoadProgram(program)`, and `RunProgram()` methods for clients that need separate low-level operations.
 - Add controller-wide `PauseProgram()` and `StopProgram()` methods.
 - Poll the Dashboard program-state getter into the read-only `Status/ProgramState` variable.
 - Reserve the empty `Parameters` folder for typed RTDE-backed setters.
@@ -45,10 +46,11 @@
 These are accepted MVP limitations:
 
 - Program start methods are generated only at startup.
-- Dashboard responses remain text and are currently discarded by no-result OPC UA methods rather than interpreted as success or failure.
+- Dashboard responses remain uninterpreted text. Generic lifecycle methods and generated start methods return the final Dashboard response, but do not map
+  controller failures to OPC UA status codes.
 - A generated start method performs load followed by play without validating the load response.
 - `ProgramState` temporarily polls Dashboard rather than RTDE, opening one connection per poll.
-- RTDE and parameter nodes are not implemented yet.
+- The reusable RTDE transport client is implemented, but the gateway's parameter nodes, register schema, and invocation handshake are not.
 - Robot operations are not serialized across concurrent OPC UA clients.
 - OPC UA uses `NoSecurity`.
 - SFTP automatically accepts unknown host keys and supports password authentication only.
@@ -89,8 +91,8 @@ The application should describe a task independently of either architecture. A t
 - A typed argument schema containing names, required values, defaults, validation constraints, descriptions, and robot-side mappings.
 - Optional timeout, cancellation, and result definitions.
 
-The implemented declarative package is intentionally flat and has no method arguments. The first invocation model should use typed parameter setters, typed
-status getters, and no-argument methods:
+The implemented declarative package is intentionally flat. It supports typed method inputs and results, but the first invocation model should still use typed
+parameter setters, typed status getters, and no-argument start methods so arguments can be staged and committed atomically:
 
 ```text
 Status/
@@ -107,8 +109,8 @@ Methods/
 
 Parameter setters write caller values to RTDE staging registers. A start or invoke method validates that the required parameters have been supplied, assigns an
 invocation identifier, commits the staged register set, and then uses the configured execution strategy. Status getters poll RTDE values and publish robot
-acknowledgement, execution state, and results. A later convenience API with method arguments should be considered only after this flat contract proves
-insufficient; it is not part of `declarative_opcua_server` version 0.1.
+acknowledgement, execution state, and results. Typed method arguments are available for simple commands such as `LoadProgram(program)`, but directly passing a
+complete task invocation as method arguments should be considered only after its atomicity, retry, and acknowledgement semantics are designed.
 
 Individual OPC UA variable writes are not atomic. The argument protocol must prevent a robot from reading a mixture of old and new values:
 
@@ -155,13 +157,13 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 ### Reusable Python packages
 
 - Maintain the two local independently installable distributions now implemented beneath `packages/`: `declarative_opcua_server` and `universal_robots_clients`.
-- Keep `declarative_opcua_server` bounded to three flat interfaces: polled status getters, client-written parameter setters, and no-argument methods. Do not add
+- Keep `declarative_opcua_server` bounded to three flat interfaces: polled status getters, client-written parameter setters, and typed methods. Do not add
   arbitrary object descriptors, nested schemas, stable NodeId configuration, or events without a concrete consumer that cannot use asyncua directly.
-- Complete callback-failure, port-binding, subscription, build-artifact, and clean-install tests before publishing version 0.1 externally.
+- Complete callback-failure, port-binding, subscription, build-artifact, and clean-install tests before publishing externally.
 - Keep robot task schemas, invocation identifiers, staged and active values, RTDE mappings, and execution policy in this gateway. Add another OPC UA capability
   later only if the implemented invocation model demonstrates that flat status, parameter, and method functions are insufficient.
-- Keep the implemented Dashboard and program-discovery modules independent. Add `universal_robots_clients.rtde` only after its dependency, connection, getter,
-  setter, timeout, and reconnect contracts are proven against URSim.
+- Keep the implemented Dashboard, program-discovery, and RTDE modules independent. Keep task schemas, register allocation, commit and acknowledgement logic, and
+  invocation policy in the gateway rather than the package.
 - Decouple each package from gateway `Args`, UR20-specific OPC UA names, application command dictionaries, shortcut policy, password prompting, and process
   lifecycle.
 - Keep this repository as the product-specific composition layer that installs the packages with pip, selects configuration and execution policy, builds flat
@@ -207,7 +209,8 @@ See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md
 
 ### Third-party robot libraries
 
-- Reconsider `ur_rtde`, `python-urx`, and other maintained Universal Robots libraries before expanding the robot-integration surface.
+- Reconsider `python-urx` and other maintained Universal Robots libraries before expanding the robot-integration surface. The RTDE module currently uses
+  `ur-rtde`; continue evaluating its maintenance, compatibility, and operational behavior as the invocation design develops.
 - Revisit this decision when the gateway needs persistent connection management, richer robot state, RTDE data, URScript operations, or control beyond the
   Dashboard Server.
 - Prefer an established library if it provides tested protocol handling, reconnection, synchronization, error interpretation, and compatibility across relevant

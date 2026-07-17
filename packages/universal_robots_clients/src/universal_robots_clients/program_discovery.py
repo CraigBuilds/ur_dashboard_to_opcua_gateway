@@ -1,8 +1,8 @@
 """Discover Universal Robots program files through local filesystems or SFTP.
 
 All discovery functions recursively find case-insensitive ``.urp`` files, return paths relative to the supplied root, normalize separators to forward slashes,
-and sort results deterministically. ``discover_local_programs()`` uses ``pathlib``. ``discover_sftp_programs()`` traverses an already connected SFTP client so
-connection ownership and authentication can remain with the caller. ``discover_programs_over_sftp()`` is a convenience operation for simple applications.
+and sort results deterministically. ``discover_programs()`` selects local or SFTP discovery through one backend argument. Lower-level functions remain
+available for callers that already know their backend or own an SFTP connection.
 
 The convenience operation makes unknown-host-key trust an explicit argument and imports Paramiko only when called. The package's base installation can therefore
 perform local discovery without Paramiko, while callers selecting SFTP choose authentication, endpoint, timeout, and host-key behavior deliberately.
@@ -15,7 +15,7 @@ import pathlib
 import stat
 import typing
 
-__all__ = ["discover_local_programs", "discover_programs_over_sftp", "discover_sftp_programs"]
+__all__ = ["discover_local_programs", "discover_programs", "discover_programs_over_sftp", "discover_sftp_programs"]
 
 DEFAULT_SFTP_PORT = 22
 DEFAULT_SFTP_TIMEOUT = 5.0
@@ -88,3 +88,26 @@ def discover_programs_over_sftp(
     with ssh:
         with ssh.open_sftp() as sftp:
             return discover_sftp_programs(sftp, root)
+
+
+def discover_programs(
+    backend: str,
+    root: typing.Union[str, pathlib.Path, pathlib.PurePosixPath],
+    host: typing.Optional[str] = None,
+    username: str = "root",
+    password: typing.Optional[str] = None,
+    port: int = DEFAULT_SFTP_PORT,
+    timeout: float = DEFAULT_SFTP_TIMEOUT,
+    trust_unknown_host_keys: bool = False,
+) -> typing.List[str]:
+    """Discover URP files through the selected local or SFTP backend.
+
+    Used by applications that select discovery from configuration, including ``ur_dashboard_to_opcua_gateway``.
+    """
+    if backend == "local":
+        return discover_local_programs(root)
+
+    if backend == "sftp":
+        return discover_programs_over_sftp(typing.cast(str, host), root, username, typing.cast(str, password), port, timeout, trust_unknown_host_keys)
+
+    raise ValueError(f"Unsupported program-discovery backend: {backend}")

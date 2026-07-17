@@ -29,7 +29,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e "./packages/declarative_opcua_server[test]"
-          python -m pip install -e "./packages/universal_robots_clients[test]"
+          python -m pip install -e "./packages/universal_robots_clients[rtde,test]"
           python -m pip install -e "./code[test]"
 
       - name: Run architecture and unit tests
@@ -78,7 +78,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e "./packages/declarative_opcua_server"
-          python -m pip install -e "./packages/universal_robots_clients[sftp]"
+          python -m pip install -e "./packages/universal_robots_clients[sftp,rtde]"
           python -m pip install -e "./code[system-test]"
 
       - name: Run system tests

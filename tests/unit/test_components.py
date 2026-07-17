@@ -74,10 +74,10 @@ def test_compose_gateway_wires_dependencies(monkeypatch: pytest.MonkeyPatch) -> 
     """Compose configured functions and return the configured server."""
     args = parse_command_line_args.Args(catalog="local")
     dashboard_commands = {}
-    commands = {}
-    shortcuts = {}
+    command_registry = combine_program_discovery_and_control.CommandRegistry(commands={}, program_operations={})
     server = object()
     discovery_functions: typing.List[typing.Callable[[], typing.List[str]]] = []
+    server_calls: typing.List[typing.Tuple[object, str]] = []
 
     def configured_discovery(actual: parse_command_line_args.Args) -> typing.List[str]:
         """Return programs for the composition test."""
@@ -92,17 +92,23 @@ def test_compose_gateway_wires_dependencies(monkeypatch: pytest.MonkeyPatch) -> 
         assert actual_dashboard_commands is dashboard_commands
         discovery_functions.append(actual_discovery)
 
-        return commands
+        return command_registry
+
+    def create_server(actual_registry: combine_program_discovery_and_control.CommandRegistry, endpoint: str) -> object:
+        """Capture the composed command registry."""
+        server_calls.append((actual_registry, endpoint))
+
+        return server
 
     monkeypatch.setattr(discover_ur_programs, "discover_programs", configured_discovery)
     monkeypatch.setattr(control_ur_programs_via_dashboard, "create_dashboard_commands", lambda actual: dashboard_commands)
     monkeypatch.setattr(combine_program_discovery_and_control, "create_command_registry", create_command_registry)
-    monkeypatch.setattr(combine_program_discovery_and_control, "create_program_shortcuts", lambda actual_commands: shortcuts)
-    monkeypatch.setattr(expose_program_commands_via_opcua, "create_server", lambda actual_commands, actual_shortcuts, endpoint: server)
+    monkeypatch.setattr(expose_program_commands_via_opcua, "create_server", create_server)
 
     result = compose_gateway.compose_gateway(args)
 
     assert result is server
+    assert server_calls == [(command_registry, args.opcua_endpoint)]
     assert len(discovery_functions) == 1
     configured_discovery_function = discovery_functions[0]
     assert isinstance(configured_discovery_function, functools.partial)

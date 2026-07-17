@@ -1,8 +1,8 @@
 """Assemble the gateway's concrete dependencies without starting the process.
 
 This module is the composition root: the one place that knows every feature module and connects them in runtime order. It binds ``Args`` to program discovery
-with ``functools.partial``, creates Dashboard command functions, combines both sets of operations into the application command registry, generates per-program
-shortcuts, and asks the OPC UA adapter to expose the result.
+with ``functools.partial``, creates Dashboard command functions, combines both sets of operations into the complete application command registry, and asks the
+OPC UA adapter to expose the result.
 
 The sole public API is ``compose_gateway(args)``. It returns a fully configured but unstarted synchronous ``asyncua`` server; ``_01_main`` remains responsible
 for entering the server context, waiting for process signals, and shutting it down. This separation makes composition independently testable and keeps lifecycle
@@ -32,7 +32,6 @@ def compose_gateway(args: parse_command_line_args.Args) -> asyncua.sync.Server:
     """
     discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
     dashboard_commands = control_ur_programs_via_dashboard.create_dashboard_commands(args)
-    commands = combine_program_discovery_and_control.create_command_registry(discover_programs_function, dashboard_commands)
-    shortcuts = combine_program_discovery_and_control.create_program_shortcuts(commands)
+    command_registry = combine_program_discovery_and_control.create_command_registry(discover_programs_function, dashboard_commands)
 
-    return expose_program_commands_via_opcua.create_server(commands, shortcuts, args.opcua_endpoint)
+    return expose_program_commands_via_opcua.create_server(command_registry, args.opcua_endpoint)

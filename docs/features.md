@@ -32,6 +32,7 @@
 - Configure local or SFTP catalogue selection through the command line.
 - Resolve validated configuration into an immutable `Args` data class.
 - Represent program discovery and Dashboard operations as configured functions.
+- Build generic controller commands and bound per-program operations into one `CommandRegistry` data model.
 - Compose concrete modules without starting them.
 - Read the SFTP password from `UR_ROBOT_PASSWORD` or an interactive prompt.
 - Keep Paramiko optional and import it only when SFTP discovery is used.
@@ -58,15 +59,14 @@ The module boundaries are intended to support these additions without redesignin
 
 ### Per-program operations
 
-- Replace the term "program shortcuts" with **per-program operations**. If address-space compatibility permits, rename the `ProgramShortcuts` folder to
-  `Programs`, represent each discovered program as an object, and rename the generic `programs()` method to `list_programs()` to avoid ambiguity.
+- Complete the terminology change from "program shortcuts" to **per-program operations** in the public OPC UA address space. If compatibility permits, rename
+  the `ProgramShortcuts` folder to `Programs`, represent each discovered program as an object, and rename the generic `programs()` method to `list_programs()`
+  to avoid ambiguity.
 - Expand each program object beyond the current no-argument `load()` and `run()` convenience methods. Candidate operations include loading, starting, invoking
   with arguments, and reading whether that specific program is loaded or active.
 - Keep controller-wide behavior semantically honest. Dashboard `pause`, `stop`, loaded-program, and current-state commands act on the robot controller rather
   than a named program. They should remain robot-level operations unless a per-program wrapper verifies that the selected program is the active target before
   acting.
-- Define one stable application model and derive both the generic controller methods and the per-program OPC UA objects from it, rather than maintaining two
-  independently assembled command dictionaries.
 - Decide how program additions, removals, and metadata changes update the `Programs` tree. The current startup-only snapshot can remain the MVP behavior, while
   later versions may support an explicit refresh or controlled address-space rebuild.
 

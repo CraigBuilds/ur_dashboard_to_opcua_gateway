@@ -1,6 +1,6 @@
 """Adapt the application command model into a synchronous OPC UA server.
 
-This is the package's presentation and transport boundary. ``create_server()`` receives the generic command registry and per-program shortcuts produced by
+This is the package's presentation and transport boundary. ``create_server()`` receives the complete command registry produced by
 ``_06_combine_program_discovery_and_control``. It creates the ``Objects/UR20`` address space, exposes generic operations as methods, and mirrors program paths
 below ``ProgramShortcuts`` with no-argument ``load`` and ``run`` methods. Function signatures and return annotations are inspected to generate OPC UA input and
 output metadata, including string-array results for program discovery.
@@ -25,13 +25,15 @@ import asyncua.ua
 import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
 
 _Method = typing.Callable[..., combine_program_discovery_and_control.CommandResult]
+_Commands = typing.Dict[str, combine_program_discovery_and_control.Command]
+_ProgramOperations = typing.Dict[str, _Commands]
 _FolderCache = typing.Dict[pathlib.PurePosixPath, asyncua.sync.SyncNode]
 
 __all__ = ["OPC_NAMESPACE", "create_server"]
 
 OPC_NAMESPACE = "urn:ur20:program-control"
 _OPC_OBJECT_NAME = "UR20"
-_SHORTCUTS_FOLDER = "ProgramShortcuts"
+_PROGRAM_OPERATIONS_FOLDER = "ProgramShortcuts"
 
 
 def _string_argument(name: str, is_array: bool = False) -> asyncua.ua.Argument:
@@ -91,7 +93,7 @@ def _make_method(command: combine_program_discovery_and_control.Command) -> _Met
     return method
 
 
-def _add_methods(parent: asyncua.sync.SyncNode, namespace: int, commands: combine_program_discovery_and_control.CommandRegistry) -> None:
+def _add_methods(parent: asyncua.sync.SyncNode, namespace: int, commands: _Commands) -> None:
     """Add registered commands as OPC UA methods beneath one node."""
     items = commands.items()
 
@@ -123,11 +125,11 @@ def _get_program_folder(root: asyncua.sync.SyncNode, namespace: int, path: pathl
     return current
 
 
-def _add_program_shortcuts(parent: asyncua.sync.SyncNode, namespace: int, shortcuts: combine_program_discovery_and_control.ProgramShortcuts) -> None:
-    """Add no-argument program shortcuts beneath one OPC UA folder."""
-    root = parent.add_folder(namespace, _SHORTCUTS_FOLDER)
+def _add_program_operations(parent: asyncua.sync.SyncNode, namespace: int, program_operations: _ProgramOperations) -> None:
+    """Add no-argument per-program operations beneath one OPC UA folder."""
+    root = parent.add_folder(namespace, _PROGRAM_OPERATIONS_FOLDER)
     folders: _FolderCache = {}
-    items = shortcuts.items()
+    items = program_operations.items()
 
     for program, commands in items:
         path = pathlib.PurePosixPath(program)
@@ -136,9 +138,7 @@ def _add_program_shortcuts(parent: asyncua.sync.SyncNode, namespace: int, shortc
         _add_methods(program_node, namespace, commands)
 
 
-def create_server(
-    commands: combine_program_discovery_and_control.CommandRegistry, shortcuts: combine_program_discovery_and_control.ProgramShortcuts, endpoint: str
-) -> asyncua.sync.Server:
+def create_server(command_registry: combine_program_discovery_and_control.CommandRegistry, endpoint: str) -> asyncua.sync.Server:
     """Expose program commands through a configured OPC UA server.
 
     Used by ``_03_compose_gateway.compose_gateway()``.
@@ -153,7 +153,7 @@ def create_server(
     objects = server.nodes.objects
     robot = objects.add_object(namespace, _OPC_OBJECT_NAME)
 
-    _add_methods(robot, namespace, commands)
-    _add_program_shortcuts(robot, namespace, shortcuts)
+    _add_methods(robot, namespace, command_registry.commands)
+    _add_program_operations(robot, namespace, command_registry.program_operations)
 
     return server

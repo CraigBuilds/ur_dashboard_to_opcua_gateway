@@ -1,17 +1,19 @@
 """Build the transport-independent application command model.
 
 This module sits between concrete program operations and the OPC UA adapter. ``create_command_registry()`` combines a zero-argument discovery function with the
-configured Dashboard functions under stable command names. ``create_program_shortcuts()`` runs discovery during gateway composition and creates bound ``load``
-and ``run`` functions for every program, preserving directory paths for the presentation layer. A shortcut ``run`` currently performs load followed by play and
-returns both raw Dashboard responses; response validation, atomicity, and cross-client serialization are planned beyond the MVP.
+configured Dashboard functions under stable command names. It also runs discovery during gateway composition and creates bound ``load`` and ``run`` functions
+for every program, preserving directory paths for the presentation layer. A per-program ``run`` currently performs load followed by play and returns both raw
+Dashboard responses; response validation, atomicity, and cross-client serialization are planned beyond the MVP.
 
-The public API also includes the ``Command``, ``CommandResult``, ``CommandRegistry``, and ``ProgramShortcuts`` type aliases that define the data exchanged with
-the composition root and OPC UA module. Network access and OPC UA concepts are intentionally absent from this layer.
+The public API consists of ``create_command_registry()`` and the ``Command``, ``CommandResult``, and ``CommandRegistry`` types that describe its result. The
+registry is one application model containing generic commands and per-program operations. Network access and OPC UA concepts are intentionally absent from this
+layer.
 
 Its only package dependency is ``_05_control_ur_programs_via_dashboard`` for the Dashboard command dictionary type. Discovery is accepted as a callable instead
 of imported directly, allowing the composition root to supply configured behaviour and keeping this module straightforward to test.
 """
 
+import dataclasses
 import functools
 import typing
 
@@ -19,10 +21,23 @@ import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as co
 
 CommandResult = typing.Union[str, typing.List[str]]
 Command = typing.Callable[..., CommandResult]
-CommandRegistry = typing.Dict[str, Command]
-ProgramShortcuts = typing.Dict[str, CommandRegistry]
+_Commands = typing.Dict[str, Command]
+_ProgramOperations = typing.Dict[str, _Commands]
 
-__all__ = ["Command", "CommandRegistry", "CommandResult", "ProgramShortcuts", "create_command_registry", "create_program_shortcuts"]
+
+@dataclasses.dataclass(frozen=True)
+class CommandRegistry:
+    """Hold all transport-independent commands exposed by the gateway.
+
+    Used by ``_03_compose_gateway.compose_gateway()`` and
+    ``_07_expose_program_commands_via_opcua.create_server()``.
+    """
+
+    commands: _Commands
+    program_operations: _ProgramOperations
+
+
+__all__ = ["Command", "CommandRegistry", "CommandResult", "create_command_registry"]
 
 
 def _run_program(load: Command, start: Command, program: str) -> str:
@@ -36,18 +51,17 @@ def _run_program(load: Command, start: Command, program: str) -> str:
 def create_command_registry(
     discover_programs: typing.Callable[[], typing.List[str]], dashboard_commands: control_ur_programs_via_dashboard.DashboardCommands
 ) -> CommandRegistry:
-    """Combine program discovery and Dashboard control into application commands.
+    """Build the complete application command model.
 
     Used by ``_03_compose_gateway.compose_gateway()``.
     """
-    return {"programs": discover_programs, **dashboard_commands}
+    commands: _Commands = {"programs": discover_programs, **dashboard_commands}
+
+    return CommandRegistry(commands=commands, program_operations=_create_program_operations(commands))
 
 
-def create_program_shortcuts(commands: CommandRegistry) -> ProgramShortcuts:
-    """Create no-argument load and run commands for every discovered program.
-
-    Used by ``_03_compose_gateway.compose_gateway()``.
-    """
+def _create_program_operations(commands: _Commands) -> _ProgramOperations:
+    """Create no-argument load and run commands for every discovered program."""
     result = commands["programs"]()
 
     if not isinstance(result, list):
@@ -56,11 +70,11 @@ def create_program_shortcuts(commands: CommandRegistry) -> ProgramShortcuts:
 
     load = commands["load"]
     start = commands["start"]
-    shortcuts: ProgramShortcuts = {}
+    program_operations: _ProgramOperations = {}
 
     for program in result:
         load_one = functools.partial(load, program)
         run_one = functools.partial(_run_program, load, start, program)
-        shortcuts[program] = {"load": load_one, "run": run_one}
+        program_operations[program] = {"load": load_one, "run": run_one}
 
-    return shortcuts
+    return program_operations

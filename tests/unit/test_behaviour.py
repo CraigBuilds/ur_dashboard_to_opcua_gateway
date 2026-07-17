@@ -228,16 +228,18 @@ def test_command_registry_preserves_supplied_functions() -> None:
     """Expose discovery and Dashboard functions under stable command names."""
     discover = lambda: ["Main.urp"]
     load = lambda program: program
-    dashboard_commands = {"load": load}
+    start = lambda: "started"
+    dashboard_commands = {"load": load, "start": start}
 
-    commands = combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
+    command_registry = combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
 
-    assert commands == {"programs": discover, "load": load}
-    assert commands["programs"] is discover
-    assert commands["load"] is load
+    assert command_registry.commands == {"programs": discover, "load": load, "start": start}
+    assert command_registry.commands["programs"] is discover
+    assert command_registry.commands["load"] is load
+    assert list(command_registry.program_operations) == ["Main.urp"]
 
 
-def test_program_shortcuts_bind_each_program_and_run_in_order() -> None:
+def test_command_registry_binds_each_program_and_runs_in_order() -> None:
     """Create correctly bound load and run functions for every discovered program."""
     events: typing.List[str] = []
 
@@ -253,32 +255,27 @@ def test_program_shortcuts_bind_each_program_and_run_in_order() -> None:
 
         return "started"
 
-    commands: combine_program_discovery_and_control.CommandRegistry = {
-        "programs": lambda: ["Main.urp", "Production/PickPart.urp"],
-        "load": load,
-        "start": start,
-    }
+    discover = lambda: ["Main.urp", "Production/PickPart.urp"]
+    dashboard_commands = {"load": load, "start": start}
 
-    shortcuts = combine_program_discovery_and_control.create_program_shortcuts(commands)
+    command_registry = combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
+    program_operations = command_registry.program_operations
 
-    assert list(shortcuts) == ["Main.urp", "Production/PickPart.urp"]
-    assert shortcuts["Main.urp"]["load"]() == "loaded Main.urp"
+    assert list(program_operations) == ["Main.urp", "Production/PickPart.urp"]
+    assert program_operations["Main.urp"]["load"]() == "loaded Main.urp"
     assert events == ["load:Main.urp"]
     events.clear()
-    assert shortcuts["Production/PickPart.urp"]["run"]() == "loaded Production/PickPart.urp; started"
+    assert program_operations["Production/PickPart.urp"]["run"]() == "loaded Production/PickPart.urp; started"
     assert events == ["load:Production/PickPart.urp", "start"]
 
 
-def test_program_shortcuts_require_a_list_catalogue() -> None:
+def test_command_registry_requires_a_list_catalogue() -> None:
     """Reject a discovery command that violates the registry contract."""
-    commands: combine_program_discovery_and_control.CommandRegistry = {
-        "programs": lambda: "Main.urp",
-        "load": lambda program: program,
-        "start": lambda: "started",
-    }
+    discover = lambda: "Main.urp"
+    dashboard_commands = {"load": lambda program: program, "start": lambda: "started"}
 
     with pytest.raises(TypeError, match="must return a list"):
-        combine_program_discovery_and_control.create_program_shortcuts(commands)
+        combine_program_discovery_and_control.create_command_registry(discover, dashboard_commands)
 
 
 def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -358,17 +355,20 @@ def test_create_server_configures_endpoint_namespace_and_adapters(monkeypatch: p
     server.register_namespace.return_value = 4
     robot = unittest.mock.MagicMock()
     server.nodes.objects.add_object.return_value = robot
-    commands: combine_program_discovery_and_control.CommandRegistry = {"programs": lambda: []}
-    shortcuts: combine_program_discovery_and_control.ProgramShortcuts = {}
+    commands = {"programs": lambda: []}
+    program_operations = {}
+    command_registry = combine_program_discovery_and_control.CommandRegistry(commands=commands, program_operations=program_operations)
     method_calls: typing.List[typing.Tuple[object, int, object]] = []
-    shortcut_calls: typing.List[typing.Tuple[object, int, object]] = []
+    program_operation_calls: typing.List[typing.Tuple[object, int, object]] = []
     monkeypatch.setattr(expose_program_commands_via_opcua.asyncua.sync, "Server", lambda: server)
     monkeypatch.setattr(expose_program_commands_via_opcua, "_add_methods", lambda parent, namespace, actual: method_calls.append((parent, namespace, actual)))
     monkeypatch.setattr(
-        expose_program_commands_via_opcua, "_add_program_shortcuts", lambda parent, namespace, actual: shortcut_calls.append((parent, namespace, actual))
+        expose_program_commands_via_opcua,
+        "_add_program_operations",
+        lambda parent, namespace, actual: program_operation_calls.append((parent, namespace, actual)),
     )
 
-    result = expose_program_commands_via_opcua.create_server(commands, shortcuts, "opc.tcp://127.0.0.1:4840/gateway/")
+    result = expose_program_commands_via_opcua.create_server(command_registry, "opc.tcp://127.0.0.1:4840/gateway/")
 
     assert result is server
     server.set_endpoint.assert_called_once_with("opc.tcp://127.0.0.1:4840/gateway/")
@@ -377,7 +377,7 @@ def test_create_server_configures_endpoint_namespace_and_adapters(monkeypatch: p
     server.register_namespace.assert_called_once_with(expose_program_commands_via_opcua.OPC_NAMESPACE)
     server.nodes.objects.add_object.assert_called_once_with(4, "UR20")
     assert method_calls == [(robot, 4, commands)]
-    assert shortcut_calls == [(robot, 4, shortcuts)]
+    assert program_operation_calls == [(robot, 4, program_operations)]
 
 
 def test_program_fixture_archives_are_reproducible(tmp_path: pathlib.Path) -> None:

@@ -6,7 +6,7 @@ import typing
 
 import asyncua.sync
 import pytest
-import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
+import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
 
 if sys.version_info < (3, 10):
     pytest.skip("Container-backed system tests require Python 3.10 or newer.", allow_module_level=True)
@@ -15,7 +15,7 @@ pytest.importorskip("testcontainers", reason="Install the system-test extra to r
 
 import tests.system.robot_lab as robot_lab_module
 
-OPC_NAMESPACE = expose_program_commands_via_opcua.OPC_NAMESPACE
+OPC_NAMESPACE = compose_gateway.OPC_NAMESPACE
 
 
 def child(parent: asyncua.sync.SyncNode, namespace: int, name: str) -> asyncua.sync.SyncNode:

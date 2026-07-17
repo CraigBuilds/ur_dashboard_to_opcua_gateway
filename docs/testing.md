@@ -7,7 +7,7 @@ Executable tests are organized by both distribution ownership and scope:
 - `packages/declarative_opcua_server/tests/` verifies the standalone OPC UA API with validation tests and a real asyncua client.
 - `packages/universal_robots_clients/tests/` verifies Dashboard framing and local/SFTP discovery with deterministic fakes.
 - `tests/architecture/` statically enforces conventions across all three distributions and their tests.
-- `tests/unit/` verifies gateway configuration, adapters, interface policy, composition, and lifecycle.
+- `tests/unit/` verifies gateway configuration, package binding, interface policy, composition, and lifecycle.
 - `tests/system/` verifies the installed distributions together with real URSim, OpenSSH, the gateway container, and an OPC UA client.
 
 `tests/support/` contains shared fixtures and is not another test type.
@@ -46,7 +46,7 @@ The non-container tests cover:
   UA client.
 - Dashboard line injection, greeting and response framing, endpoint forwarding, and exact named command construction.
 - Local and caller-owned SFTP traversal, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
-- Command-line defaults, overrides, credentials, validation, and package-adapter delegation.
+- Command-line defaults, overrides, credentials, validation, and package delegation.
 - Flat per-program method naming, collision detection, load-before-play policy, controller methods, and status composition.
 - OPC UA application identity forwarding, composition-root wiring, signal handling, and clean managed-server shutdown.
 - Reproducible no-motion URP fixtures and system-test runner argument handling.

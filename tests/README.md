@@ -19,8 +19,8 @@ imports, documented public consumers, and the functional convention that product
 
 ## Gateway unit tests
 
-`unit/` tests command-line resolution, package adapters, flat interface construction, composition, process lifecycle, deterministic program fixtures, and the
-system-test runner with fakes and temporary files.
+`unit/` tests command-line resolution, direct package binding, flat interface construction, composition, process lifecycle, deterministic program fixtures, and
+the system-test runner with fakes and temporary files.
 
 ## System tests
 

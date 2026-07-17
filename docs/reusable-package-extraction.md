@@ -202,7 +202,9 @@ The application still owns meaningful behavior:
 - Supply the `UR20` root, namespace, and endpoint.
 - Own process signals and the complete system test.
 
-RTDE will add product-specific task schemas, parameter mappings, and resource composition rather than moving those decisions into either reusable package.
+RTDE will add product-specific task schemas, parameter mappings, and resource composition rather than moving those decisions into either reusable package. These
+current policies fit together in `_03_compose_gateway`; another application module should be introduced only when a future policy or long-lived resource has
+enough independent behavior to justify its own tests and lifecycle boundary.
 
 ## Local development and release path
 

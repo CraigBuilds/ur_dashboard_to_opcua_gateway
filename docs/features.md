@@ -32,10 +32,9 @@
 
 - Configure local or SFTP catalogue selection through the command line.
 - Resolve validated configuration into an immutable `Args` data class.
-- Represent program discovery and Dashboard operations as configured functions supplied by `universal_robots_clients`.
-- Build flat status, parameter, and method dictionaries into one immutable `GatewayInterfaces` data model.
-- Create OPC UA through the independently installable `declarative_opcua_server` package.
-- Compose concrete modules without starting them.
+- Call program discovery and Dashboard operations directly through qualified `universal_robots_clients` module APIs.
+- Build flat status, parameter, and method dictionaries directly in the composition root.
+- Create an unstarted server through the independently installable `declarative_opcua_server` package.
 - Read the SFTP password from `UR_ROBOT_PASSWORD` or an interactive prompt.
 - Keep Paramiko in the optional `universal-robots-clients[sftp]` extra and import it only for SFTP connection setup.
 - Keep process startup, `SIGINT`, `SIGTERM`, and shutdown in the main module.
@@ -59,7 +58,7 @@ The MVP should therefore be used on a controlled or isolated network.
 
 ## Planned features
 
-The module boundaries are intended to support these additions without redesigning the package.
+The package boundaries and compact composition root are intended to support these additions without redesigning the reusable protocol layers.
 
 ### Flat program methods
 
@@ -214,7 +213,7 @@ See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md
 - Prefer an established library if it provides tested protocol handling, reconnection, synchronization, error interpretation, and compatibility across relevant
   robot and PolyScope versions.
 - Before adoption, assess maintenance activity, licensing, Python 3.8.3 support, native or container dependencies, API stability, security history, and fit with
-  the gateway's functional module boundaries.
+  the gateway's small qualified package APIs.
 - Keep the direct socket implementation inside `universal_robots_clients.dashboard` while the MVP only needs a small set of line-oriented commands, because a
   broader robot library would currently add dependency and architectural complexity without replacing much code.
 

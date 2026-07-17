@@ -49,11 +49,10 @@ The gateway source modules remain in their intended reading order:
 _01_main.py
 _02_parse_command_line_args.py
 _03_compose_gateway.py
-_04_discover_ur_programs.py
-_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde.py
-_06_combine_program_discovery_and_control.py
-_07_expose_program_commands_via_opcua.py
 ```
+
+The application stays deliberately small: argument resolution, product-specific composition, and process lifecycle are its only concerns. Program discovery,
+Dashboard communication, and OPC UA hosting live in the reusable packages.
 
 ## Install
 

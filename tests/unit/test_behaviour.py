@@ -1,6 +1,5 @@
-"""Test gateway validation, application policy, adapters, and lifecycle behavior."""
+"""Test gateway validation, package binding, application policy, and lifecycle."""
 
-import functools
 import pathlib
 import signal
 import types
@@ -12,10 +11,7 @@ import universal_robots_clients.dashboard as dashboard
 import universal_robots_clients.program_discovery as program_discovery
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
-import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
-import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
-import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
+import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
 
 import tests.support.program_fixture as program_fixture
 import tests.system.run as run_system_tests
@@ -76,7 +72,7 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
 def test_discovery_rejects_invalid_configuration(args: parse_command_line_args.Args, message: str) -> None:
     """Report unsupported or incomplete discovery configuration clearly."""
     with pytest.raises(ValueError, match=message):
-        discover_ur_programs.discover_programs(args)
+        compose_gateway._discover_programs(args)
 
 
 def test_sftp_discovery_delegates_resolved_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,75 +90,56 @@ def test_sftp_discovery_delegates_resolved_configuration(monkeypatch: pytest.Mon
         catalog="sftp", programs_folder="/robot/programs", robot_host="robot", robot_password="secret", sftp_port=2222, sftp_username="operator"
     )
 
-    assert discover_ur_programs.discover_programs(args) == ["Main.urp"]
+    assert compose_gateway._discover_programs(args) == ["Main.urp"]
     assert captured == {"host": "robot", "root": "/robot/programs", "username": "operator", "password": "secret", "port": 2222, "trust_unknown_host_keys": True}
 
 
-def test_dashboard_adapter_binds_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Bind gateway arguments while retaining qualified reusable package operations."""
+def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bind package operations into typed flat interfaces and retain execution order."""
     calls: typing.List[typing.Tuple[str, typing.Tuple[object, ...]]] = []
+    captured: typing.Dict[str, object] = {}
 
-    monkeypatch.setattr(dashboard, "load_program", lambda *args: calls.append(("load", args)) or "loaded")
-    monkeypatch.setattr(dashboard, "play_program", lambda *args: calls.append(("play", args)) or "played")
-    monkeypatch.setattr(dashboard, "pause_program", lambda *args: calls.append(("pause", args)) or "paused")
-    monkeypatch.setattr(dashboard, "stop_program", lambda *args: calls.append(("stop", args)) or "stopped")
-    monkeypatch.setattr(dashboard, "get_program_state", lambda *args: calls.append(("state", args)) or "STOPPED")
-    args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
-    commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
-
-    assert commands["load_program"]("Main.urp") == "loaded"
-    assert commands["play_program"]() == "played"
-    assert commands["pause_program"]() == "paused"
-    assert commands["stop_program"]() == "stopped"
-    assert commands["get_program_state"]() == "STOPPED"
-    assert calls == [
-        ("load", ("robot", "Main.urp", 30000, 5.0)),
-        ("play", ("robot", 30000, 5.0)),
-        ("pause", ("robot", 30000, 5.0)),
-        ("stop", ("robot", 30000, 5.0)),
-        ("state", ("robot", 30000, 5.0)),
-    ]
-
-
-def test_gateway_interfaces_bind_program_methods_and_robot_operations() -> None:
-    """Create flat, no-result application methods while retaining execution order."""
-    events: typing.List[str] = []
-
-    def load(program: str) -> str:
-        """Record one program load."""
-        events.append(f"load:{program}")
+    def load(host: str, program: str, port: int, timeout: float) -> str:
+        calls.append(("load", (host, program, port, timeout)))
 
         return "loaded"
 
-    def command(name: str) -> typing.Callable[[], str]:
-        """Create one response-returning Dashboard command."""
+    def command(name: str, response: str) -> typing.Callable[[str, int, float], str]:
+        def run(host: str, port: int, timeout: float) -> str:
+            calls.append((name, (host, port, timeout)))
 
-        def run() -> str:
-            """Record one Dashboard operation."""
-            events.append(name)
-
-            return name
+            return response
 
         return run
 
-    state = command("state")
-    commands = {
-        "load_program": load,
-        "play_program": command("play"),
-        "pause_program": command("pause"),
-        "stop_program": command("stop"),
-        "get_program_state": state,
-    }
-    interfaces = combine_program_discovery_and_control.create_interfaces(lambda: ["Main.urp", "Production/Pick Part.urp"], commands)
+    monkeypatch.setattr(dashboard, "load_program", load)
+    monkeypatch.setattr(dashboard, "play_program", command("play", "played"))
+    monkeypatch.setattr(dashboard, "pause_program", command("pause", "paused"))
+    monkeypatch.setattr(dashboard, "stop_program", command("stop", "stopped"))
+    monkeypatch.setattr(dashboard, "get_program_state", command("state", "STOPPED"))
+    args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
+    monkeypatch.setattr(compose_gateway, "_discover_programs", lambda actual: ["Main.urp", "Production/Pick Part.urp"])
+    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or object())
 
-    assert interfaces.parameter_interface == {}
-    assert interfaces.status_interface == {"ProgramState": state}
-    assert set(interfaces.method_interface) == {"StartProgram_Main", "StartProgram_Production_Pick_Part", "PauseProgram", "StopProgram"}
-    assert inspect_signature_parameters(interfaces.method_interface) == set()
-    interfaces.method_interface["StartProgram_Production_Pick_Part"]()
-    interfaces.method_interface["PauseProgram"]()
-    interfaces.method_interface["StopProgram"]()
-    assert events == ["load:Production/Pick Part.urp", "play", "pause", "stop"]
+    compose_gateway.compose_gateway(args)
+
+    status_interface = typing.cast(typing.Dict[str, typing.Callable[[], object]], captured["status_interface"])
+    method_interface = typing.cast(typing.Dict[str, typing.Callable[[], None]], captured["method_interface"])
+    assert captured["parameter_interface"] == {}
+    assert set(method_interface) == {"StartProgram_Main", "StartProgram_Production_Pick_Part", "PauseProgram", "StopProgram"}
+    assert inspect_signature_parameters(status_interface) == set()
+    assert inspect_signature_parameters(method_interface) == set()
+    assert status_interface["ProgramState"]() == "STOPPED"
+    method_interface["StartProgram_Production_Pick_Part"]()
+    method_interface["PauseProgram"]()
+    method_interface["StopProgram"]()
+    assert calls == [
+        ("state", ("robot", 30000, 5.0)),
+        ("load", ("robot", "Production/Pick Part.urp", 30000, 5.0)),
+        ("play", ("robot", 30000, 5.0)),
+        ("pause", ("robot", 30000, 5.0)),
+        ("stop", ("robot", 30000, 5.0)),
+    ]
 
 
 def inspect_signature_parameters(interface: typing.Mapping[str, typing.Callable[..., object]]) -> typing.Set[str]:
@@ -174,45 +151,10 @@ def inspect_signature_parameters(interface: typing.Mapping[str, typing.Callable[
 
 def test_program_method_name_collisions_are_rejected() -> None:
     """Reject distinct program paths that flatten to the same OPC UA method name."""
-    commands = {
-        "load_program": lambda program: "loaded",
-        "play_program": lambda: "played",
-        "pause_program": lambda: "paused",
-        "stop_program": lambda: "stopped",
-        "get_program_state": lambda: "STOPPED",
-    }
+    args = parse_command_line_args.Args(catalog="local")
 
     with pytest.raises(ValueError, match="duplicate"):
-        combine_program_discovery_and_control.create_interfaces(lambda: ["Pick-Part.urp", "Pick Part.urp"], commands)
-
-
-def test_opcua_adapter_forwards_flat_interfaces(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Supply application identity and all three interfaces to the reusable server."""
-    interfaces = combine_program_discovery_and_control.GatewayInterfaces(
-        status_interface={"State": lambda: "STOPPED"}, parameter_interface={}, method_interface={"Stop": lambda: None}
-    )
-    server = object()
-    captured: typing.Dict[str, object] = {}
-
-    def create_server(**configuration: object) -> object:
-        """Capture one reusable server creation."""
-        captured.update(configuration)
-
-        return server
-
-    monkeypatch.setattr(expose_program_commands_via_opcua.declarative_opcua_server, "create_server", create_server)
-
-    result = expose_program_commands_via_opcua.create_server(interfaces, "opc.tcp://127.0.0.1:4840/gateway/")
-
-    assert result is server
-    assert captured == {
-        "status_interface": interfaces.status_interface,
-        "parameter_interface": interfaces.parameter_interface,
-        "method_interface": interfaces.method_interface,
-        "endpoint": "opc.tcp://127.0.0.1:4840/gateway/",
-        "namespace": expose_program_commands_via_opcua.OPC_NAMESPACE,
-        "root_object": "UR20",
-    }
+        compose_gateway._create_method_interface(args, ["Pick-Part.urp", "Pick Part.urp"])
 
 
 def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -332,9 +332,10 @@ Responsibilities:
     connection health and reconnect behavior
 ```
 
-It should be prototyped through `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`. Moving an unproven implementation immediately into the
-package would freeze an API before the register contract, invocation state machine, and robot-side conventions are known. Once stable, the protocol behavior
-moves into `universal_robots_clients.rtde`, while commit semantics, acknowledgement workflow, naming, and task policy remain in the gateway.
+It should initially be prototyped in the gateway's composition layer, extracting another application module only when the RTDE lifecycle or invocation policy
+becomes too substantial to read clearly there. Moving an unproven implementation immediately into the package would freeze an API before the register contract,
+invocation state machine, and robot-side conventions are known. Once stable, the protocol behavior moves into `universal_robots_clients.rtde`, while commit
+semantics, acknowledgement workflow, naming, and task policy remain in the gateway.
 
 ### What remains in the gateway
 
@@ -463,7 +464,7 @@ Package extraction and the multi-protocol change should continue in distinct pha
 1. Harden the locally implemented Dashboard and program-discovery package contracts and run the complete gateway suite against built artifacts.
 1. Publish both distributions externally without changing their import packages or the gateway's composition model.
 1. Define the protocol-neutral invocation state machine, task schema, flat naming rules, and capability boundaries inside the gateway.
-1. Select an RTDE dependency and prototype the persistent connection, register contract, and robot-side handshake through module 5.
+1. Select an RTDE dependency and prototype the persistent connection, register contract, and robot-side handshake in the gateway composition layer.
 1. Generate flat status getters and parameter setters from the task schema and supply them to `declarative_opcua_server`.
 1. Add real URSim tests for parameters, commit, acknowledgement, failures, and both execution strategies.
 1. Move proven protocol mechanics into `universal_robots_clients.rtde`; retain task and workflow policy in the gateway.
@@ -503,14 +504,14 @@ the gateway product.
 
 ## Recommendation
 
-Extract the bounded `declarative_opcua_server` package first, then adopt the capability-based multi-protocol architecture and prove Dashboard plus RTDE inside
-this gateway. The package supplies generic methods, variables, folders, and objects; the gateway retains task schemas and invocation coordination.
+Keep the locally extracted `declarative_opcua_server` and `universal_robots_clients` distributions bounded to their implemented APIs, harden them, and publish
+them without restoring application adapter modules. The compact gateway composition root should retain task schemas and invocation coordination.
 
-Afterward, extract Dashboard and program discovery into separate modules of `universal_robots_clients`; keep RTDE local until its reusable contract is proven,
-then add it to the same distribution.
+Prototype Dashboard-plus-RTDE behavior in the gateway until the RTDE protocol and register contract are proven. Then move reusable protocol mechanics into a new
+`universal_robots_clients.rtde` module while leaving invocation policy in the application.
 
-This approach keeps the current modularity, avoids coupling OPC UA clients to robot protocol details, and lets the product grow from a Dashboard bridge into a
-general UR robot integration gateway without turning every internal abstraction into a package prematurely.
+This approach keeps the current package boundaries, avoids coupling OPC UA clients to robot protocol details, and lets the product grow from a Dashboard bridge
+into a general UR robot integration gateway without turning every application decision into a module or package prematurely.
 
 ## References
 

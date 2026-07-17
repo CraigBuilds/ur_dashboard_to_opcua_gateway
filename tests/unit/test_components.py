@@ -13,7 +13,7 @@ import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
 import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as control_ur_programs_via_dashboard
+import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
 import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
 import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
 
@@ -36,7 +36,7 @@ def test_local_catalogue(tmp_path: pathlib.Path) -> None:
 def test_dashboard_rejects_newline() -> None:
     """Reject embedded Dashboard commands before opening a connection."""
     with pytest.raises(ValueError):
-        control_ur_programs_via_dashboard.send_command("127.0.0.1", 29999, "play\nstop")
+        control_ur_programs_and_exchange_parameters.send_command("127.0.0.1", 29999, "play\nstop")
 
 
 def test_local_command_line_args() -> None:
@@ -60,7 +60,7 @@ def test_component_configuration(tmp_path: pathlib.Path) -> None:
     """Configure discovery and Dashboard functions from arguments."""
     args = parse_command_line_args.Args(catalog="local", programs_folder=str(tmp_path), dashboard_host="dashboard", dashboard_port=30000)
     discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
-    dashboard_commands = control_ur_programs_via_dashboard.create_dashboard_commands(args)
+    dashboard_commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
 
     assert discover_programs_function() == []
     assert set(dashboard_commands) == {"load", "start", "pause", "stop", "status"}
@@ -86,7 +86,7 @@ def test_compose_gateway_wires_dependencies(monkeypatch: pytest.MonkeyPatch) -> 
         return []
 
     def create_command_registry(
-        actual_discovery: typing.Callable[[], typing.List[str]], actual_dashboard_commands: control_ur_programs_via_dashboard.DashboardCommands
+        actual_discovery: typing.Callable[[], typing.List[str]], actual_dashboard_commands: control_ur_programs_and_exchange_parameters.DashboardCommands
     ) -> combine_program_discovery_and_control.CommandRegistry:
         """Capture the configured discovery function."""
         assert actual_dashboard_commands is dashboard_commands
@@ -95,7 +95,7 @@ def test_compose_gateway_wires_dependencies(monkeypatch: pytest.MonkeyPatch) -> 
         return commands
 
     monkeypatch.setattr(discover_ur_programs, "discover_programs", configured_discovery)
-    monkeypatch.setattr(control_ur_programs_via_dashboard, "create_dashboard_commands", lambda actual: dashboard_commands)
+    monkeypatch.setattr(control_ur_programs_and_exchange_parameters, "create_dashboard_commands", lambda actual: dashboard_commands)
     monkeypatch.setattr(combine_program_discovery_and_control, "create_command_registry", create_command_registry)
     monkeypatch.setattr(combine_program_discovery_and_control, "create_program_shortcuts", lambda actual_commands: shortcuts)
     monkeypatch.setattr(expose_program_commands_via_opcua, "create_server", lambda actual_commands, actual_shortcuts, endpoint: server)

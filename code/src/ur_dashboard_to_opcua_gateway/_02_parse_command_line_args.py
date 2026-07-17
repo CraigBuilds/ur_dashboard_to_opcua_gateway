@@ -33,7 +33,8 @@ _PASSWORD_VARIABLE = "UR_ROBOT_PASSWORD"
 class Args:
     """Resolved gateway configuration.
 
-    Used by ``_01_main``, ``_03_compose_gateway``, ``_04_discover_ur_programs``, and ``_05_control_ur_programs_via_dashboard``.
+    Used by ``_01_main``, ``_03_compose_gateway``, ``_04_discover_ur_programs``, and
+    ``_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde``.
     """
 
     catalog: str

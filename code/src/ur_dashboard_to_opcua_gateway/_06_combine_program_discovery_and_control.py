@@ -8,14 +8,15 @@ returns both raw Dashboard responses; response validation, atomicity, and cross-
 The public API also includes the ``Command``, ``CommandResult``, ``CommandRegistry``, and ``ProgramShortcuts`` type aliases that define the data exchanged with
 the composition root and OPC UA module. Network access and OPC UA concepts are intentionally absent from this layer.
 
-Its only package dependency is ``_05_control_ur_programs_via_dashboard`` for the Dashboard command dictionary type. Discovery is accepted as a callable instead
-of imported directly, allowing the composition root to supply configured behaviour and keeping this module straightforward to test.
+Its only package dependency is ``_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`` for the Dashboard command dictionary type. Discovery
+is accepted as a callable instead of imported directly, allowing the composition root to supply configured behaviour and keeping this module straightforward to
+test.
 """
 
 import functools
 import typing
 
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as control_ur_programs_via_dashboard
+import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
 
 CommandResult = typing.Union[str, typing.List[str]]
 Command = typing.Callable[..., CommandResult]
@@ -34,7 +35,7 @@ def _run_program(load: Command, start: Command, program: str) -> str:
 
 
 def create_command_registry(
-    discover_programs: typing.Callable[[], typing.List[str]], dashboard_commands: control_ur_programs_via_dashboard.DashboardCommands
+    discover_programs: typing.Callable[[], typing.List[str]], dashboard_commands: control_ur_programs_and_exchange_parameters.DashboardCommands
 ) -> CommandRegistry:
     """Combine program discovery and Dashboard control into application commands.
 

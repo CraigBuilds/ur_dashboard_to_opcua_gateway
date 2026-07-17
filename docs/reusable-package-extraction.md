@@ -2,46 +2,50 @@
 
 ## Purpose
 
-This report proposes extracting three reusable Python packages from the gateway:
+This report proposes extracting two reusable Python distributions from the gateway:
 
 1. A generic OPC UA method server that exposes Python callables from a declarative method tree.
-1. A Universal Robots Dashboard Server client.
-1. A Universal Robots program-discovery library.
+1. A Universal Robots client library containing separate modules for Dashboard control, RTDE communication, and UR program-file discovery.
 
-The remaining `ur_dashboard_to_opcua_gateway` application would install those packages, apply gateway-specific policy, compose them, and own process
-configuration and lifecycle. This direction preserves the current functional architecture while turning three independently useful adapters into small libraries
-that other projects can install with `pip`.
+The remaining `ur_dashboard_to_opcua_gateway` application would install those distributions, apply gateway-specific policy, compose their APIs, and own process
+configuration and lifecycle. This direction preserves the current functional architecture while making the generic OPC UA adapter and the collection of
+robot-facing Universal Robots integrations independently reusable.
 
-This is a proposed target architecture. The packages have not yet been extracted.
+This is a proposed target architecture. The distributions have not yet been extracted.
 
 The later [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) extends this proposal for parameterized program invocation. Dashboard
-control and program discovery remain strong package boundaries, while the OPC UA package scope should be finalized only after writable argument variables,
-invocation state, and events are proven. That design may also produce a fourth RTDE package, but recommends keeping RTDE inside the gateway until its public
-contract is stable.
+control and program discovery are already stable enough to extract. RTDE should remain inside the gateway until its public contract is proven, then move into
+the same Universal Robots client distribution rather than becoming another independently versioned package. The OPC UA package scope should be finalized only
+after writable argument variables, invocation state, and events are proven.
 
 ## Summary
 
-The current modules already suggest natural package boundaries:
+The current and planned capabilities suggest these package boundaries:
 
-| Current module                          | Proposed package       | Suitability                                                         |
-| --------------------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| `_04_discover_ur_programs`              | `ur_program_discovery` | Strong, after configuration and SSH policy are decoupled            |
-| `_05_control_ur_programs_via_dashboard` | `ur_dashboard_client`  | Strongest and most immediately reusable candidate                   |
-| `_07_expose_program_commands_via_opcua` | `opcua_method_server`  | Strong, provided its address-space model remains deliberately small |
+| Current or planned capability           | Proposed module                              | Suitability                                                         |
+| --------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
+| `_04_discover_ur_programs`              | `universal_robots_clients.program_discovery` | Strong, after configuration and SSH policy are decoupled            |
+| `_05_control_ur_programs_via_dashboard` | `universal_robots_clients.dashboard`         | Strongest and most immediately reusable candidate                   |
+| Planned RTDE adapter                    | `universal_robots_clients.rtde`              | Strong after its narrow public contract is proven in the gateway    |
+| `_07_expose_program_commands_via_opcua` | `opcua_method_server`                        | Strong, provided its address-space model remains deliberately small |
 
 The other production modules should remain application code:
 
 - `_01_main` owns this process's entry point and lifecycle.
 - `_02_parse_command_line_args` defines this application's combined configuration.
 - `_03_compose_gateway` is this application's composition root.
-- `_06_combine_program_discovery_and_control` defines gateway-specific command and shortcut policy.
+- `_06_combine_program_discovery_and_control` defines gateway-specific command and per-program operation policy.
 
-The extraction should reduce the gateway rather than merely move its existing coupling into other repositories. Each package must accept ordinary values and
-callables instead of depending on the gateway's `Args`, command registry, module names, OPC UA object names, or process lifecycle.
+The extraction should reduce the gateway rather than merely move its existing coupling into other repositories. Each distribution must accept ordinary values
+and callables instead of depending on the gateway's `Args`, command registry, module names, OPC UA object names, or process lifecycle.
+
+Dashboard, RTDE, and program discovery belong in one distribution because they are all reusable ways of interacting with a Universal Robots controller or its
+program assets and are likely to be installed by the same applications. They should remain separate import modules because their protocols, optional
+dependencies, connection lifecycles, and failure modes are different. Cohesion at the distribution level must not become coupling at the implementation level.
 
 ## Design principles
 
-Each proposed package should:
+Each proposed distribution should:
 
 - Have one coherent responsibility and a small public API.
 - Be useful without installing or importing the gateway.
@@ -53,8 +57,12 @@ Each proposed package should:
 - Remain functional unless state and resource ownership provide a concrete benefit.
 - Add features only when a real consumer needs them.
 
-The gateway should retain end-to-end tests across the installed packages. Passing each package's unit tests is necessary but does not prove that their released
-versions compose correctly.
+Within `universal_robots_clients`, the `dashboard`, `program_discovery`, and `rtde` modules should not import one another. A small shared module is justified
+only for conventions that genuinely repeat, such as endpoint data or common connection errors. The package should not introduce one stateful client that opens
+and owns all three protocols because their connection and resource lifecycles are materially different.
+
+The gateway should retain end-to-end tests across the installed distributions. Passing each distribution's unit tests is necessary but does not prove that
+their released versions compose correctly.
 
 ## Generic OPC UA method server
 
@@ -150,33 +158,54 @@ continue to request the behavior it currently uses.
 The primary risk is overgeneralization. `asyncua` already supplies the complete OPC UA implementation; this package should remain a concise adapter from
 callables to a useful method-oriented address space, not become a competing OPC UA framework.
 
-## Universal Robots Dashboard client
+## Universal Robots clients
 
-### Goal
+### Goal and name
 
-The Dashboard package would provide ordinary Python functions for communicating with a Universal Robots Dashboard Server. It would be usable by commissioning
-scripts, diagnostics, automated tests, manufacturing tools, alternative gateways, and applications that do not use OPC UA.
+This distribution would collect reusable Python integrations for Universal Robots controllers and program assets. It would be useful to commissioning scripts,
+diagnostics, automated tests, manufacturing tools, alternative gateways, and applications that do not use OPC UA.
 
-`ur_dashboard_client` is a clear package name.
+The recommended distribution name is `universal-robots-clients`, with the import package `universal_robots_clients`. This is more explicit and searchable than
+`ur-clients`, which depends on readers already knowing what "UR" means and can be mistaken for a generic client collection. `ur-robot-clients` is a reasonable
+shorter alternative, but the full vendor name provides better context. Package availability must be checked again immediately before publication, and the
+project metadata should state clearly that this is an independent library rather than an official Universal Robots product.
 
-### Proposed API
+The distribution should expose separate `dashboard`, `program_discovery`, and `rtde` modules. Users should import the module that owns the operation being
+called:
+
+```python
+import universal_robots_clients.dashboard as dashboard
+import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.rtde as rtde
+```
+
+The root package should not re-export every function. Keeping calls qualified as `dashboard.play_program()`, `program_discovery.discover_local_programs()`, and
+`rtde.<operation>()` makes protocol ownership visible and avoids name collisions as the package grows.
+
+### Dashboard client
+
+#### Goal
+
+The `dashboard` module would provide ordinary Python functions for communicating with a Universal Robots Dashboard Server.
+
+#### Proposed API
 
 The public API should use direct connection values rather than the gateway's `Args`:
 
 ```python
-import ur_dashboard_client
+import universal_robots_clients.dashboard as dashboard
 
-state = ur_dashboard_client.get_program_state("192.0.2.10")
-loaded = ur_dashboard_client.load_program("192.0.2.10", "Production/PickPart.urp")
-started = ur_dashboard_client.play_program("192.0.2.10")
-ur_dashboard_client.pause_program("192.0.2.10")
-ur_dashboard_client.stop_program("192.0.2.10")
+state = dashboard.get_program_state("192.0.2.10")
+loaded = dashboard.load_program("192.0.2.10", "Production/PickPart.urp")
+started = dashboard.play_program("192.0.2.10")
+dashboard.pause_program("192.0.2.10")
+dashboard.stop_program("192.0.2.10")
 ```
 
 The low-level operation should also remain available:
 
 ```python
-response = ur_dashboard_client.send_command(
+response = dashboard.send_command(
     host="192.0.2.10",
     command="robotmode",
     port=29999,
@@ -187,9 +216,9 @@ response = ur_dashboard_client.send_command(
 An optional immutable endpoint dataclass may be worthwhile when callers repeatedly use the same host, port, and timeout. It should be a convenience layer, not a
 requirement for simple function calls.
 
-### Package responsibilities
+#### Responsibilities
 
-The package should own:
+The `dashboard` module should own:
 
 - Dashboard TCP connection and line framing.
 - Greeting and response handling.
@@ -202,20 +231,21 @@ The package should own:
 The first release can preserve raw string responses to keep the extraction behaviorally small. Typed response interpretation should be designed later because
 different Dashboard commands use different textual success and failure conventions.
 
-### Package exclusions
+#### Exclusions
 
-The package should not know about:
+The `dashboard` module should not know about:
 
 - SFTP or local program discovery.
+- RTDE recipes or register exchange.
 - OPC UA.
 - Gateway command names such as `start` when the Dashboard command is `play`.
 - The gateway's `Args`.
-- Program shortcuts.
+- Per-program operations.
 - Gateway-wide concurrency or load-and-start policy.
 
 The gateway can adapt `play_program()` to its public `start` command and decide how to compose `load` followed by `play`.
 
-### Future package features
+#### Future features
 
 Likely future additions include:
 
@@ -228,30 +258,31 @@ Likely future additions include:
 
 Persistent connections should not be part of the initial extraction. The current connection-per-command behavior is simple, stateless, and already tested.
 
-## Universal Robots program discovery
+### Program discovery
 
-### Goal
+#### Goal
 
-The discovery package would find `.urp` files from local filesystems and remote SFTP trees and return deterministic paths relative to a configured program root.
-It could support program browsers, deployment checks, backup tools, auditing, synchronization, and gateways using protocols other than OPC UA.
+The `program_discovery` module would find `.urp` files from local filesystems and remote SFTP trees and return deterministic paths relative to a configured
+program root. It could support program browsers, deployment checks, backup tools, auditing, synchronization, and gateways using protocols other than OPC UA.
 
-`ur_program_discovery` is a suitable working name. `ur_program_catalog` is another option if the package later includes metadata and refreshable catalogue
-objects, but the initial API performs discovery rather than owning long-lived catalogue state.
+Local traversal is not a network client in the narrow sense, but it accesses the same UR program resource as SFTP and applies the same `.urp` filtering,
+relative path normalization, and sorting rules. Keeping both backends in `universal_robots_clients.program_discovery` gives callers one discovery contract
+regardless of whether the robot's program directory is mounted locally or reached through SFTP.
 
-### Proposed API
+#### Proposed API
 
 Local discovery should require only a path:
 
 ```python
-import ur_program_discovery
+import universal_robots_clients.program_discovery as program_discovery
 
-programs = ur_program_discovery.discover_local_programs("/programs")
+catalog = program_discovery.discover_local_programs("/programs")
 ```
 
 The lowest-level SFTP API should accept an already connected SFTP client:
 
 ```python
-programs = ur_program_discovery.discover_sftp_programs(
+catalog = program_discovery.discover_sftp_programs(
     sftp_client,
     "/programs",
 )
@@ -261,7 +292,7 @@ This boundary keeps authentication, host-key policy, SSH keys, connection timeou
 documented convenience function may open an SFTP connection for simple callers:
 
 ```python
-programs = ur_program_discovery.discover_programs_over_sftp(
+catalog = program_discovery.discover_programs_over_sftp(
     host="192.0.2.10",
     root="/programs",
     username="robot",
@@ -272,12 +303,12 @@ programs = ur_program_discovery.discover_programs_over_sftp(
 Paramiko should remain an optional package extra if local discovery can operate without it:
 
 ```bash
-python -m pip install "ur_program_discovery[sftp]"
+python -m pip install "universal-robots-clients[sftp]"
 ```
 
-### Package responsibilities
+#### Responsibilities
 
-The package should own:
+The `program_discovery` module should own:
 
 - Case-insensitive `.urp` identification.
 - Recursive local filesystem traversal.
@@ -286,19 +317,89 @@ The package should own:
 - Deterministic sorting.
 - Clear errors for invalid roots and unsupported directory entries.
 
-### Package exclusions
+#### Exclusions
 
-The package should not know about:
+The `program_discovery` module should not know about:
 
 - The gateway's `Args`.
 - Dashboard control.
+- RTDE communication.
 - OPC UA.
 - Password prompting or environment-variable names.
 - A mandatory SSH host-key acceptance policy.
-- Program execution or shortcut creation.
+- Program execution or per-program operation creation.
 
 The convenience SFTP function may expose host-key policy explicitly, but the core traversal function should work with a caller-owned client and therefore avoid
 making that decision.
+
+### RTDE client
+
+#### Goal and timing
+
+The `rtde` module would provide the RTDE operations needed by parameterized program invocation and other robot-data consumers. It belongs in the same
+distribution as Dashboard control because both are client protocols for the same controller and will commonly be used together. It should not be a separate
+package merely because it uses another TCP port and protocol.
+
+RTDE should first be implemented and proven inside the gateway. Once its useful public contract is clear, that implementation and its focused tests should move
+into `universal_robots_clients.rtde`. Adding the module later lets the first package release contain the already understood Dashboard and program-discovery APIs
+without prematurely freezing an RTDE abstraction.
+
+#### Intended responsibilities
+
+The `rtde` module may eventually own:
+
+- RTDE connection setup, protocol negotiation, and teardown.
+- Recipe configuration for the supported input and output values.
+- Reading robot state required by higher-level consumers.
+- Writing input registers used by a caller-defined invocation protocol.
+- Timeouts, reconnect behavior, and protocol-specific exceptions.
+- Focused tests against fakes and URSim.
+
+It should expose protocol capabilities, not gateway task policy. Invocation identifiers, argument schemas, acknowledgement rules, retries, cancellation, and
+workflow state remain in the gateway's protocol-neutral coordinator.
+
+The final API should be designed after deciding whether to use the official RTDE Python client, `ur_rtde`, or another maintained implementation. If a
+third-party library already provides the required behavior, this module should add only a small, useful facade or compatibility layer; it should not
+reimplement RTDE or hide a capable dependency behind a narrower API without a concrete benefit.
+
+### Distribution structure and dependencies
+
+The intended source layout is:
+
+```text
+universal_robots_clients/
+    __init__.py
+    dashboard.py
+    program_discovery.py
+    rtde.py
+```
+
+The base installation should provide Dashboard and local program discovery using the Python standard library. Optional dependencies should remain feature
+specific:
+
+```bash
+python -m pip install universal-robots-clients
+python -m pip install "universal-robots-clients[sftp]"
+python -m pip install "universal-robots-clients[rtde]"
+python -m pip install "universal-robots-clients[all]"
+```
+
+The `sftp` extra would install Paramiko. The `rtde` extra would install whichever RTDE implementation is selected after evaluation. Importing or using an
+optional module without its dependency should produce a clear installation error, while Dashboard and local discovery must continue to work without either
+extra.
+
+### Distribution exclusions
+
+The Universal Robots client package should not own:
+
+- OPC UA nodes, methods, status codes, or server lifecycle.
+- The gateway's `Args`, `CommandRegistry`, public command names, or per-program operation tree.
+- Program invocation schemas, cross-protocol coordination, or application workflow state.
+- Atomic load-and-start policy or serialization across independent callers.
+- Password prompting, environment-variable names, signal handling, or process lifecycle.
+- One umbrella `RobotClient` that implicitly opens Dashboard, SFTP, and RTDE resources together.
+
+The package supplies robot-facing capabilities. Applications decide which capabilities to configure, how to compose them, and who owns their lifecycles.
 
 ## The remaining gateway application
 
@@ -308,10 +409,11 @@ application:
 - Parse command-line and environment configuration.
 - Select local or SFTP discovery.
 - Bind Dashboard host, port, and timeout.
+- Configure RTDE recipes and connection ownership when parameterized invocation is added.
 - Choose gateway command names.
-- Create per-program `load` and `run` shortcuts.
+- Create per-program `load` and `run` operations.
 - Define the `UR20` root object, `ProgramShortcuts` structure, OPC UA namespace, and endpoint.
-- Compose the installed packages.
+- Compose the installed distributions.
 - Own signal handling, startup, and shutdown.
 - Retain the complete Docker-backed system test.
 
@@ -321,20 +423,20 @@ A possible composition shape is:
 import functools
 
 import opcua_method_server
-import ur_dashboard_client
-import ur_program_discovery
+import universal_robots_clients.dashboard as dashboard
+import universal_robots_clients.program_discovery as program_discovery
 
 discover_programs = functools.partial(
-    ur_program_discovery.discover_local_programs,
+    program_discovery.discover_local_programs,
     args.programs_folder,
 )
 
 dashboard_commands = {
-    "load": functools.partial(ur_dashboard_client.load_program, args.dashboard_host),
-    "start": functools.partial(ur_dashboard_client.play_program, args.dashboard_host),
-    "pause": functools.partial(ur_dashboard_client.pause_program, args.dashboard_host),
-    "stop": functools.partial(ur_dashboard_client.stop_program, args.dashboard_host),
-    "status": functools.partial(ur_dashboard_client.get_program_state, args.dashboard_host),
+    "load": functools.partial(dashboard.load_program, args.dashboard_host),
+    "start": functools.partial(dashboard.play_program, args.dashboard_host),
+    "pause": functools.partial(dashboard.pause_program, args.dashboard_host),
+    "stop": functools.partial(dashboard.stop_program, args.dashboard_host),
+    "status": functools.partial(dashboard.get_program_state, args.dashboard_host),
 }
 
 methods = gateway_commands.create_method_tree(discover_programs, dashboard_commands)
@@ -347,11 +449,12 @@ server = opcua_method_server.create_server(
 )
 ```
 
-SFTP selection, port binding, timeout binding, and shortcut construction have been omitted from this example for readability. They remain application
-composition concerns.
+SFTP selection, port binding, timeout binding, and per-program operation construction have been omitted from this example for readability. They remain
+application composition concerns. A future RTDE adapter would be imported from `universal_robots_clients.rtde`, while invocation schemas and workflow
+coordination would remain application code.
 
-The resulting gateway may be only a small amount of production code, but it still has a meaningful responsibility: it defines how three generic capabilities are
-configured and combined into one deployable product.
+The resulting gateway may be only a small amount of production code, but it still has a meaningful responsibility: it defines how the generic OPC UA server and
+the required Universal Robots client modules are configured and combined into one deployable product.
 
 ## Target dependency graph
 
@@ -360,15 +463,18 @@ ur_dashboard_to_opcua_gateway
     +-- opcua_method_server
     |       +-- asyncua
     |
-    +-- ur_dashboard_client
-    |       +-- Python standard library
-    |
-    +-- ur_program_discovery
-            +-- Python standard library
-            +-- paramiko [optional SFTP extra]
+    +-- universal_robots_clients
+            +-- dashboard
+            |       +-- Python standard library
+            +-- program_discovery
+            |       +-- Python standard library
+            |       +-- paramiko [optional SFTP extra]
+            +-- rtde
+                    +-- selected RTDE implementation [optional RTDE extra]
 ```
 
-The three reusable packages should not depend on one another. The gateway is the only layer that understands their combined use.
+The two reusable distributions should not depend on one another. The modules inside `universal_robots_clients` should also remain independent except for a
+minimal shared foundation justified by repeated protocol-neutral behavior. The gateway is the only layer that understands their combined use.
 
 ## Testing ownership
 
@@ -383,7 +489,7 @@ Tests should move with the behavior they verify:
 - Callback adaptation.
 - Security defaults.
 
-### `ur_dashboard_client`
+### `universal_robots_clients.dashboard`
 
 - Command validation.
 - Greeting and response exchanges.
@@ -391,7 +497,7 @@ Tests should move with the behavior they verify:
 - Exact Dashboard command formatting.
 - Public command functions.
 
-### `ur_program_discovery`
+### `universal_robots_clients.program_discovery`
 
 - Local traversal.
 - SFTP traversal with fake clients.
@@ -400,20 +506,29 @@ Tests should move with the behavior they verify:
 - Deterministic ordering.
 - Optional dependency behavior.
 
+### `universal_robots_clients.rtde`
+
+- Protocol negotiation and recipe configuration.
+- Input and output value handling.
+- Connection teardown, timeouts, and reconnect behavior.
+- Compatibility with supported controller and PolyScope versions.
+- Real RTDE exchanges against URSim.
+
 ### `ur_dashboard_to_opcua_gateway`
 
 - Command-line parsing.
-- Gateway command and shortcut policy.
+- Gateway command and per-program operation policy.
 - Composition against package APIs.
+- Protocol-neutral invocation schemas and coordination.
 - Process lifecycle.
-- The real end-to-end system test using URSim, OpenSSH, the gateway, and an OPC UA client.
+- The real end-to-end system test using URSim, OpenSSH, Dashboard, RTDE when enabled, the gateway, and an OPC UA client.
 
-The gateway system test is the compatibility contract between released package versions. Dependency updates should not be accepted unless that complete pipeline
-still passes.
+The gateway system test is the compatibility contract between released distribution versions. Dependency updates should not be accepted unless that complete
+pipeline still passes.
 
 ## Packaging and release strategy
 
-Each library should have independent:
+Each distribution should have independent:
 
 - Package metadata and version.
 - README and API documentation.
@@ -422,8 +537,13 @@ Each library should have independent:
 - PyPI project name.
 - Source repository once the API has stabilized.
 
-The gateway should use bounded dependency ranges and a repeatable lock or constraints mechanism for release builds. Independent packages create useful reuse,
-but they also introduce compatibility management that does not exist when all modules share one version.
+The gateway should use bounded dependency ranges and a repeatable lock or constraints mechanism for release builds. Independent distributions create useful
+reuse, but they also introduce compatibility management that does not exist when all modules share one version.
+
+Publishing Dashboard, program discovery, and RTDE together means they share one version and repository. That is a reasonable trade because they serve the same
+users and avoids three sets of release metadata, documentation sites, and compatibility ranges. It also means a change to any module releases the
+distribution, so CI must test the base installation plus the `sftp`, `rtde`, and `all` extras. Optional dependencies prevent that shared release unit from
+becoming a mandatory install of every transport.
 
 During development, package extraction can proceed without immediately publishing production releases:
 
@@ -439,40 +559,50 @@ This sequence avoids a period where behavior exists in neither place and provide
 
 ## Recommended extraction order
 
-### 1. Dashboard client
+### 1. Establish the Universal Robots client package
 
-Extract `ur_dashboard_client` first. It has the clearest independent responsibility, the smallest dependency surface, and the most obvious external consumers.
-Its current protocol behavior is already well isolated and tested.
+Create `universal_robots_clients` and extract the Dashboard implementation into its `dashboard` module first. It has the clearest independent responsibility,
+the smallest dependency surface, and the most obvious external consumers. Its current protocol behavior is already well isolated and tested.
 
-### 2. Program discovery
+### 2. Add program discovery
 
-Extract `ur_program_discovery` second. Before moving it, replace the `Args` dependency with direct local and SFTP APIs and separate SFTP traversal from SSH
-connection policy.
+Move discovery into `universal_robots_clients.program_discovery`. Before moving it, replace the `Args` dependency with direct local and SFTP APIs and separate
+SFTP traversal from SSH connection policy. Publish Paramiko through the `sftp` extra rather than the base dependency set.
 
-### 3. OPC UA method server
+### 3. Prove and add RTDE
 
-Extract `opcua_method_server` third. Its implementation is small, but its public data model requires the most design care. Prove a narrow method-tree API using
-the gateway before adding broader OPC UA features.
+Implement the required RTDE behavior inside the gateway while the invocation protocol is still changing. Once its reusable boundary is demonstrated by real
+tests, move it into `universal_robots_clients.rtde` and define the `rtde` optional extra. Do not create a separate RTDE distribution.
 
-### 4. Simplify the gateway
+### 4. OPC UA method server
 
-Once all three package releases pass the real system suite, simplify the gateway modules and documentation around their installed APIs. Keep the composition
-root explicit even if it becomes short; a small application still benefits from one obvious place where dependencies and policy are assembled.
+Extract `opcua_method_server` after parameterized invocation clarifies whether the reusable abstraction remains method-oriented or needs declarative variables,
+events, and richer node descriptions. Keep it narrow enough to be useful without becoming another general OPC UA framework.
+
+### 5. Simplify the gateway
+
+Once both distributions pass the real system suite, simplify the gateway modules and documentation around their installed APIs. Keep the composition root
+explicit even if it becomes short; a small application still benefits from one obvious place where dependencies and policy are assembled.
 
 ## Decisions needed before implementation
 
 The following decisions should be made before extraction starts:
 
-- Final package and import names.
-- Whether the packages will use separate repositories immediately or move there after local API stabilization.
+- Confirm `universal-robots-clients` as the distribution name and `universal_robots_clients` as the import package after checking registry availability.
+- Whether the distributions will use separate repositories immediately or move there after local API stabilization.
+- Whether the first Universal Robots client release contains both Dashboard and program discovery or adds `program_discovery` in a second release.
+- Which maintained RTDE implementation to use and what narrow API belongs in `universal_robots_clients.rtde`.
+- Whether any endpoint or exception types are genuinely shared across the Universal Robots modules.
+- The exact optional extras and their supported installation combinations.
 - The exact nested method-tree convention for OPC UA folders and objects.
 - The supported Python-to-OPC-UA type set in the first release.
-- Whether `ur_program_discovery` includes an SFTP connection convenience API in version one.
+- Whether `universal_robots_clients.program_discovery` includes an SFTP connection convenience API in version one.
 - The Python support policy and how long Python 3.8.3-compatible releases will be maintained.
 - Version ranges and release validation used by the gateway.
 
 ## Recommendation
 
-Proceed with the three-package architecture, beginning with the Dashboard client. The boundaries align with existing responsibilities and produce libraries with
-plausible uses outside this gateway. Keep each first release deliberately narrow, preserve the gateway's real end-to-end test as the integration contract, and
-avoid generalizing beyond behavior already demonstrated by this application.
+Proceed with the two-distribution architecture. Put Dashboard, program discovery, and eventually RTDE in `universal_robots_clients`, while keeping each
+capability in its own namespaced module with independent dependencies and lifecycle. Keep the generic OPC UA server separate because it has no Universal Robots
+concern. Begin with Dashboard and program discovery, add RTDE only after the gateway proves its contract, preserve the gateway's real end-to-end test as the
+integration contract, and avoid a monolithic robot client abstraction.

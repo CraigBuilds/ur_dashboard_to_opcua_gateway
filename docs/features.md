@@ -183,6 +183,17 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 See [reusable package extraction](reusable-package-extraction.md) for the proposed package APIs, boundaries, test ownership, release strategy, and extraction
 order.
 
+### Project naming
+
+- Rename the project once RTDE or another second robot-facing protocol works end to end, because `ur_dashboard_to_opcua_gateway` will no longer describe the
+  complete product boundary.
+- Use `ur_robot_to_opcua_gateway` as the preferred working replacement unless implementation experience reveals a clearer name.
+- Make the rename one coordinated migration covering the repository, Python distribution and import package, console command, Docker image, OPC UA server name,
+  documentation, tests, and CI references.
+- Keep the current name while the product remains the Dashboard-only MVP so published names continue to describe implemented behavior.
+
+See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md#naming) for the naming rationale and other candidates.
+
 ### Reliability and command safety
 
 - Serialize robot-changing operations.

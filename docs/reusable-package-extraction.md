@@ -4,7 +4,7 @@
 
 This report proposes extracting two reusable Python distributions from the gateway:
 
-1. A generic OPC UA method server that exposes Python callables from a declarative method tree.
+1. A generic declarative OPC UA server that exposes Python callables and variables from an explicit address-space definition.
 1. A Universal Robots client library containing separate modules for Dashboard control, RTDE communication, and UR program-file discovery.
 
 The remaining `ur_dashboard_to_opcua_gateway` application would install those distributions, apply gateway-specific policy, compose their APIs, and own process
@@ -13,21 +13,24 @@ robot-facing Universal Robots integrations independently reusable.
 
 This is a proposed target architecture. The distributions have not yet been extracted.
 
-The later [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) extends this proposal for parameterized program invocation. Dashboard
-control and program discovery are already stable enough to extract. RTDE should remain inside the gateway until its public contract is proven, then move into
-the same Universal Robots client distribution rather than becoming another independently versioned package. The OPC UA package scope should be finalized only
-after writable argument variables, invocation state, and events are proven.
+The later [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) extends this proposal for parameterized program invocation. The OPC UA
+package should now be extracted first, before that larger feature is implemented. Its version-one contract can be completed independently around generic
+folders, objects, methods, variables, metadata, configuration, and lifecycle. Robot-specific argument schemas, invocation state, and RTDE coordination remain
+gateway concerns that consume those primitives later.
+
+Dashboard control and program discovery remain strong candidates for the second distribution. RTDE should stay inside the gateway until its public contract is
+proven, then move into the same Universal Robots client distribution rather than becoming another independently versioned package.
 
 ## Summary
 
 The current and planned capabilities suggest these package boundaries:
 
-| Current or planned capability           | Proposed module                              | Suitability                                                         |
-| --------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
-| `_04_discover_ur_programs`              | `universal_robots_clients.program_discovery` | Strong, after configuration and SSH policy are decoupled            |
-| `_05_control_ur_programs_via_dashboard` | `universal_robots_clients.dashboard`         | Strongest and most immediately reusable candidate                   |
-| Planned RTDE adapter                    | `universal_robots_clients.rtde`              | Strong after its narrow public contract is proven in the gateway    |
-| `_07_expose_program_commands_via_opcua` | `opcua_method_server`                        | Strong, provided its address-space model remains deliberately small |
+| Current or planned capability                                                                     | Proposed module                              | Suitability                                                      |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| `_07_expose_program_commands_via_opcua`                                                           | `declarative_opcua_server`                   | First extraction, after completing and testing its generic API   |
+| Dashboard behavior in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`    | `universal_robots_clients.dashboard`         | Strong candidate for the second reusable distribution            |
+| Planned RTDE behavior in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde` | `universal_robots_clients.rtde`              | Strong after its narrow public contract is proven in the gateway |
+| `_04_discover_ur_programs`                                                                        | `universal_robots_clients.program_discovery` | Strong, after configuration and SSH policy are decoupled         |
 
 The other production modules should remain application code:
 
@@ -64,50 +67,63 @@ and owns all three protocols because their connection and resource lifecycles ar
 The gateway should retain end-to-end tests across the installed distributions. Passing each distribution's unit tests is necessary but does not prove that their
 released versions compose correctly.
 
-## Generic OPC UA method server
+## Declarative OPC UA server
 
 ### Goal
 
-The OPC UA package would create a synchronous server from a nested mapping of names to Python callables. A consumer should be able to provide functions and
-receive an OPC UA address space whose methods reflect those functions' signatures and return annotations.
+The OPC UA package would create a synchronous server from a declarative tree of folders, objects, methods, and variables. A consumer should be able to provide
+ordinary callables and value accessors and receive an OPC UA address space whose method arguments, return values, data types, access levels, and optional stable
+NodeIds reflect that definition.
 
-`opcua_method_server` is the clearest working name because it is searchable and states both the protocol and purpose. `QuickMethodServer` communicates
-convenience but does not identify OPC UA without additional context. Other reasonable names are `opcua_function_server` and `simple_opcua_method_server`.
+The recommended working distribution name is `declarative-opcua-server`, with the import package `declarative_opcua_server`. It identifies the protocol, the
+configuration style, and the fact that the package creates a server. `opcua_method_server` is now too narrow because writable argument values and read-only
+state require variables as well as methods. `QuickMethodServer` is less searchable and has the same method-only problem. Registry availability must still be
+checked immediately before publication.
 
 ### Proposed API
 
 An initial API could look like:
 
 ```python
-import opcua_method_server
+import declarative_opcua_server as opcua_server
 
-methods = {
-    "programs": discover_programs,
-    "load": load_program,
-    "start": start_program,
-    "ProgramShortcuts": {
-        "Main.urp": {
-            "load": load_main,
-            "run": run_main,
-        },
-    },
+interface = {
+    "programs": opcua_server.Method(discover_programs),
+    "load": opcua_server.Method(load_program),
+    "state": opcua_server.Variable(read=read_state, data_type=str),
+    "requested_program": opcua_server.Variable(read=read_requested_program, write=write_requested_program, data_type=str),
+    "Programs": opcua_server.Folder(
+        children={
+            "Main.urp": opcua_server.Object(
+                children={
+                    "load": opcua_server.Method(load_main),
+                    "run": opcua_server.Method(run_main),
+                }
+            )
+        }
+    ),
 }
 
-server = opcua_method_server.create_server(
-    methods,
+server = opcua_server.create_server(
+    interface,
     endpoint="opc.tcp://127.0.0.1:4840/",
     namespace="urn:example:program-control",
     root_object="Robot",
 )
 ```
 
-For the first version, the mapping can use two rules:
+The example fixes the intended shape, not final constructor spelling. Before extraction, focused API tests should settle the exact immutable descriptor
+signatures. The version-one model should follow these rules:
 
-- A callable value becomes an OPC UA method.
-- A mapping value becomes a nested OPC UA object or folder containing more methods.
+- The top-level mapping associates browse names with explicit node descriptors beneath the configured root object.
+- `Folder`, `Object`, `Method`, and `Variable` descriptors express node class and behavior explicitly.
+- A bare callable may remain a shorthand for `Method` so simple method-only servers stay concise.
+- A `Variable` uses consumer-owned read and optional write callables; the package does not become an application-state store.
+- Optional explicit NodeIds support clients that require stable identities; generated NodeIds remain available for simple deployments.
+- Event sources are not required in version one. They can be added as another descriptor after a real consumer proves the event contract.
 
-The package must define whether nested mappings create folders or objects. If consumers need both node classes, a later version can add explicit lightweight
-descriptors such as `Folder(...)` and `Object(...)`. The first release should not build a general-purpose OPC UA schema framework.
+This is intentionally an address-space adapter rather than a general-purpose OPC UA schema framework. Advanced `asyncua` users must still be able to use
+`asyncua` directly when they need node classes or services outside the documented descriptor set.
 
 ### Package responsibilities
 
@@ -116,22 +132,25 @@ The package should own:
 - Synchronous `asyncua` server creation.
 - Endpoint and namespace registration.
 - Creation of a configured root object.
-- Recursive conversion of a method tree into OPC UA nodes.
+- Recursive conversion of the declarative interface tree into folders, objects, methods, and variables.
 - Function-signature inspection.
 - OPC UA input and output argument metadata.
 - Adaptation of Python callables to OPC UA method callbacks.
-- A documented set of supported Python argument and return types.
+- Read-only and writable variable adaptation through caller-owned access functions.
+- Optional explicit NodeIds and deterministic tree construction.
+- A documented set of supported Python method and variable types.
+- Documented callback-exception handling and a narrow way for consumers to request useful OPC UA status results.
 - Safe local defaults and clear configuration overrides.
 
-The first supported type set can remain close to proven gateway requirements:
+The first supported type set should cover the gateway's current behavior and its foreseeable invocation schemas:
 
-- `str`
-- `typing.List[str]`
-- Functions with zero or more string inputs
+- `bool`, `int`, `float`, and `str`
+- Homogeneous lists of those scalar types
+- Functions with zero or more supported inputs and zero or one supported return value
 - Synchronous functions
 
-Additional scalar types, structured values, asynchronous functions, custom status codes, and richer schemas should be added only with tests and concrete use
-cases.
+Structured values, arbitrary custom types, asynchronous functions, custom subscription helpers, historical data, alarms, and a general event-schema framework
+should be added only with tests and concrete consumers. Ordinary OPC UA subscriptions to exposed variables remain available through the underlying server.
 
 ### Package exclusions
 
@@ -142,6 +161,7 @@ The package should not know about:
 - Dashboard commands.
 - `UR20` or `ProgramShortcuts`.
 - The gateway's `CommandRegistry`.
+- Robot task schemas, invocation state machines, or RTDE register mappings.
 - Signal handling or process lifetime.
 - Gateway command-line arguments.
 
@@ -150,13 +170,27 @@ The package should not know about:
 A convenience server that defaults to OPC UA `NoSecurity` should bind to loopback by default. Listening on `0.0.0.0` must require an explicit endpoint. The API
 and documentation should make the security state visible rather than silently presenting an insecure externally reachable service as a production default.
 
-Certificates, authentication, secure policies, custom application URIs, and failure-to-status mapping can be later package features. The gateway can initially
-continue to request the behavior it currently uses.
+Certificates, authentication, secure policies, and custom application URIs can be later package features. The gateway can initially continue to request the
+behavior it currently uses. The first release must still make insecure operation conspicuous and must test that its default endpoint is local-only.
+
+### Extraction readiness
+
+The package is ready to extract when its version-one contract is explicit and independently verified. That means:
+
+- The descriptor API and supported Python-to-OPC-UA type mapping are documented and covered by tests.
+- Real `asyncua` clients can browse the generated tree, call methods, read variables, write permitted variables, and receive useful failure statuses.
+- Duplicate names, invalid definitions, callback failures, port-binding failures, startup, and shutdown have deterministic behavior.
+- Optional NodeIds remain stable across equivalent server construction.
+- A wheel and source distribution can be built, installed into a clean environment, and used through only the documented public API.
+- The gateway passes its complete unit and URSim system suites against the built package.
+
+Feature complete here means complete for this bounded version-one contract. It does not mean implementing every OPC UA service or predicting the final robot
+invocation address space.
 
 ### Main design risk
 
-The primary risk is overgeneralization. `asyncua` already supplies the complete OPC UA implementation; this package should remain a concise adapter from
-callables to a useful method-oriented address space, not become a competing OPC UA framework.
+The primary risk is overgeneralization. `asyncua` already supplies the complete OPC UA implementation; this package should remain a concise adapter from an
+explicit interface definition to a useful address space, not become a competing OPC UA framework.
 
 ## Universal Robots clients
 
@@ -422,7 +456,7 @@ A possible composition shape is:
 ```python
 import functools
 
-import opcua_method_server
+import declarative_opcua_server as opcua_server
 import universal_robots_clients.dashboard as dashboard
 import universal_robots_clients.program_discovery as program_discovery
 
@@ -439,10 +473,10 @@ dashboard_commands = {
     "status": functools.partial(dashboard.get_program_state, args.dashboard_host),
 }
 
-methods = gateway_commands.create_method_tree(discover_programs, dashboard_commands)
+interface = gateway_commands.create_interface(discover_programs, dashboard_commands)
 
-server = opcua_method_server.create_server(
-    methods,
+server = opcua_server.create_server(
+    interface,
     endpoint=args.opcua_endpoint,
     namespace="urn:ur20:program-control",
     root_object="UR20",
@@ -460,7 +494,7 @@ the required Universal Robots client modules are configured and combined into on
 
 ```text
 ur_dashboard_to_opcua_gateway
-    +-- opcua_method_server
+    +-- declarative_opcua_server
     |       +-- asyncua
     |
     +-- universal_robots_clients
@@ -480,14 +514,20 @@ minimal shared foundation justified by repeated protocol-neutral behavior. The g
 
 Tests should move with the behavior they verify:
 
-### `opcua_method_server`
+### `declarative_opcua_server`
 
 - Signature-to-argument conversion.
-- Supported scalar and array return metadata.
-- Nested method-tree construction.
+- Supported scalar and array method and variable metadata.
+- Folder, object, method, and variable descriptor validation.
+- Read-only and writable variable behavior.
+- Stable explicit NodeIds and deterministic generated trees.
 - Namespace, endpoint, and root-object configuration.
 - Callback adaptation.
+- Callback failures and consumer-selected OPC UA status results.
+- Duplicate definitions, invalid definitions, startup failures, and shutdown.
 - Security defaults.
+- Real-client browsing, method-call, read, and write contracts.
+- Wheel and source-distribution build and clean-install tests.
 
 ### `universal_robots_clients.dashboard`
 
@@ -559,25 +599,29 @@ This sequence avoids a period where behavior exists in neither place and provide
 
 ## Recommended extraction order
 
-### 1. Establish the Universal Robots client package
+### 1. Complete the declarative OPC UA contract locally
 
-Create `universal_robots_clients` and extract the Dashboard implementation into its `dashboard` module first. It has the clearest independent responsibility,
-the smallest dependency surface, and the most obvious external consumers. Its current protocol behavior is already well isolated and tested.
+Refactor `_07_expose_program_commands_via_opcua` behind the bounded descriptor API described above. Add the package-level unit, real-client integration,
+failure, lifecycle, NodeId, and distribution tests before moving code to another repository. Keep the gateway's current address space and URSim behavior
+unchanged while the generic API is established.
 
-### 2. Add program discovery
+### 2. Extract `declarative_opcua_server`
 
-Move discovery into `universal_robots_clients.program_discovery`. Before moving it, replace the `Args` dependency with direct local and SFTP APIs and separate
-SFTP traversal from SSH connection policy. Publish Paramiko through the `sftp` extra rather than the base dependency set.
+Create the independent distribution, move the proven implementation and focused tests, build installable artifacts, and use a local wheel from this gateway.
+Publish the first bounded release only after the complete gateway suite passes against that artifact. Replace the local wheel with a bounded package dependency
+before removing the superseded gateway implementation.
 
-### 3. Prove and add RTDE
+### 3. Establish the Universal Robots client package
 
-Implement the required RTDE behavior inside the gateway while the invocation protocol is still changing. Once its reusable boundary is demonstrated by real
-tests, move it into `universal_robots_clients.rtde` and define the `rtde` optional extra. Do not create a separate RTDE distribution.
+Create `universal_robots_clients` and extract the Dashboard behavior into its `dashboard` module. Then move discovery into
+`universal_robots_clients.program_discovery` after replacing the `Args` dependency with direct local and SFTP APIs and separating traversal from SSH connection
+policy. Publish Paramiko through the `sftp` extra rather than the base dependency set.
 
-### 4. OPC UA method server
+### 4. Prove and add RTDE
 
-Extract `opcua_method_server` after parameterized invocation clarifies whether the reusable abstraction remains method-oriented or needs declarative variables,
-events, and richer node descriptions. Keep it narrow enough to be useful without becoming another general OPC UA framework.
+Implement the required RTDE behavior in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde` while the invocation protocol is still
+changing. Once its reusable boundary is demonstrated by real tests, move it into `universal_robots_clients.rtde` and define the `rtde` optional extra. Do not
+create a separate RTDE distribution.
 
 ### 5. Simplify the gateway
 
@@ -586,23 +630,29 @@ explicit even if it becomes short; a small application still benefits from one o
 
 ## Decisions needed before implementation
 
-The following decisions should be made before extraction starts:
+The following decisions should be made while completing the first extraction:
+
+- Confirm `declarative-opcua-server` as the distribution name and `declarative_opcua_server` as the import package after checking registry availability.
+- Settle the final immutable descriptor constructor signatures and the callable shorthand.
+- Define the exact callback-exception and consumer-selected status-result contract.
+- Decide whether the two distributions use separate repositories immediately or move there after local API stabilization.
+- Confirm the Python support policy and how long Python 3.8.3-compatible releases are maintained.
+- Define bounded dependency ranges and release validation used by the gateway.
+
+The following Universal Robots package decisions can wait until that second distribution begins:
 
 - Confirm `universal-robots-clients` as the distribution name and `universal_robots_clients` as the import package after checking registry availability.
-- Whether the distributions will use separate repositories immediately or move there after local API stabilization.
 - Whether the first Universal Robots client release contains both Dashboard and program discovery or adds `program_discovery` in a second release.
 - Which maintained RTDE implementation to use and what narrow API belongs in `universal_robots_clients.rtde`.
 - Whether any endpoint or exception types are genuinely shared across the Universal Robots modules.
 - The exact optional extras and their supported installation combinations.
-- The exact nested method-tree convention for OPC UA folders and objects.
-- The supported Python-to-OPC-UA type set in the first release.
 - Whether `universal_robots_clients.program_discovery` includes an SFTP connection convenience API in version one.
-- The Python support policy and how long Python 3.8.3-compatible releases will be maintained.
-- Version ranges and release validation used by the gateway.
 
 ## Recommendation
 
-Proceed with the two-distribution architecture. Put Dashboard, program discovery, and eventually RTDE in `universal_robots_clients`, while keeping each
-capability in its own namespaced module with independent dependencies and lifecycle. Keep the generic OPC UA server separate because it has no Universal Robots
-concern. Begin with Dashboard and program discovery, add RTDE only after the gateway proves its contract, preserve the gateway's real end-to-end test as the
-integration contract, and avoid a monolithic robot client abstraction.
+Proceed with the two-distribution architecture and extract `declarative_opcua_server` first, after completing its deliberately bounded version-one contract and
+tests inside this repository. It should provide generic address-space construction without knowing anything about Universal Robots or invocation workflows.
+
+Then put Dashboard, program discovery, and eventually RTDE in `universal_robots_clients`, keeping each capability in its own namespaced module with independent
+dependencies and lifecycle. Add RTDE only after the gateway proves its contract, preserve the gateway's real end-to-end test as the integration contract, and
+avoid a monolithic robot client abstraction.

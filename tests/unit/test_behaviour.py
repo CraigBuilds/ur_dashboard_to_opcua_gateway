@@ -18,7 +18,7 @@ import pytest
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as control_ur_programs_via_dashboard
+import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
 import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
 import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
 
@@ -158,7 +158,7 @@ def test_sftp_transport_configures_ssh_and_sorts_results(monkeypatch: pytest.Mon
 def test_dashboard_rejects_line_breaks(command: str) -> None:
     """Reject both newline forms before opening a Dashboard connection."""
     with pytest.raises(ValueError, match="line breaks"):
-        control_ur_programs_via_dashboard.send_command("127.0.0.1", 29999, command)
+        control_ur_programs_and_exchange_parameters.send_command("127.0.0.1", 29999, command)
 
 
 def test_dashboard_send_command_exchanges_one_protocol_line(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -168,9 +168,9 @@ def test_dashboard_send_command_exchanges_one_protocol_line(monkeypatch: pytest.
     connection = unittest.mock.MagicMock()
     connection.makefile.return_value = stream
     create_connection = unittest.mock.MagicMock(return_value=connection)
-    monkeypatch.setattr(control_ur_programs_via_dashboard.socket, "create_connection", create_connection)
+    monkeypatch.setattr(control_ur_programs_and_exchange_parameters.socket, "create_connection", create_connection)
 
-    response = control_ur_programs_via_dashboard.send_command("robot", 29999, "play", timeout=2.5)
+    response = control_ur_programs_and_exchange_parameters.send_command("robot", 29999, "play", timeout=2.5)
 
     assert response == "Starting program"
     create_connection.assert_called_once_with(("robot", 29999), 2.5)
@@ -190,10 +190,10 @@ def test_dashboard_reports_incomplete_exchanges(monkeypatch: pytest.MonkeyPatch,
     stream.readline.side_effect = responses
     connection = unittest.mock.MagicMock()
     connection.makefile.return_value = stream
-    monkeypatch.setattr(control_ur_programs_via_dashboard.socket, "create_connection", lambda address, timeout: connection)
+    monkeypatch.setattr(control_ur_programs_and_exchange_parameters.socket, "create_connection", lambda address, timeout: connection)
 
     with pytest.raises(ConnectionError, match=message):
-        control_ur_programs_via_dashboard.send_command("robot", 29999, "play")
+        control_ur_programs_and_exchange_parameters.send_command("robot", 29999, "play")
 
 
 def test_dashboard_commands_map_to_protocol_commands(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,9 +206,9 @@ def test_dashboard_commands_map_to_protocol_commands(monkeypatch: pytest.MonkeyP
 
         return command
 
-    monkeypatch.setattr(control_ur_programs_via_dashboard, "send_command", send_command)
+    monkeypatch.setattr(control_ur_programs_and_exchange_parameters, "send_command", send_command)
     args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
-    commands = control_ur_programs_via_dashboard.create_dashboard_commands(args)
+    commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
 
     assert commands["load"]("Production/PickPart.urp") == "load Production/PickPart.urp"
     assert commands["start"]() == "play"

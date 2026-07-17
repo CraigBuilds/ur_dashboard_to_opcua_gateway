@@ -18,8 +18,8 @@ _03_compose_gateway.py
 _04_discover_ur_programs.py
     Discover UR programs from a local directory or SFTP.
 
-_05_control_ur_programs_via_dashboard.py
-    Control UR programs through the Universal Robots Dashboard Server.
+_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde.py
+    Control UR programs through Dashboard and provide the boundary for future RTDE parameter exchange.
 
 _06_combine_program_discovery_and_control.py
     Combine program discovery and Dashboard control into application commands.
@@ -40,18 +40,18 @@ _01_main
 _03_compose_gateway
     +-- _02_parse_command_line_args
     +-- _04_discover_ur_programs
-    +-- _05_control_ur_programs_via_dashboard
+    +-- _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
     +-- _06_combine_program_discovery_and_control
     +-- _07_expose_program_commands_via_opcua
 
 _04_discover_ur_programs
     +-- _02_parse_command_line_args
 
-_05_control_ur_programs_via_dashboard
+_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
     +-- _02_parse_command_line_args
 
 _06_combine_program_discovery_and_control
-    +-- _05_control_ur_programs_via_dashboard
+    +-- _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
 
 _07_expose_program_commands_via_opcua
     +-- _06_combine_program_discovery_and_control
@@ -76,7 +76,7 @@ _04_discover_ur_programs
     pathlib and stat for all catalogues
     paramiko only when SFTP discovery is selected
 
-_05_control_ur_programs_via_dashboard
+_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
     socket and functools
 
 _06_combine_program_discovery_and_control
@@ -108,7 +108,7 @@ _03_compose_gateway
 _04_discover_ur_programs
     discover_programs
 
-_05_control_ur_programs_via_dashboard
+_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
     DashboardCommand
     DashboardCommands
     create_dashboard_commands
@@ -140,10 +140,10 @@ Cross-module calls retain their module namespace:
 import functools
 
 import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as control_ur_programs_via_dashboard
+import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
 
 discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
-dashboard_commands = control_ur_programs_via_dashboard.create_dashboard_commands(args)
+dashboard_commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
 ```
 
 `tests/architecture/test_repository_conventions.py` enforces module docstrings, parser help messages, namespace imports, consumer documentation for public
@@ -159,7 +159,7 @@ _01_main.main()
 
 _03_compose_gateway.compose_gateway()
     -> functools.partial(_04_discover_ur_programs.discover_programs, args)
-    -> _05_control_ur_programs_via_dashboard.create_dashboard_commands()
+    -> _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde.create_dashboard_commands()
     -> _06_combine_program_discovery_and_control.create_command_registry()
     -> _07_expose_program_commands_via_opcua.create_server()
 ```

@@ -290,17 +290,17 @@ High-level and low-level clients should share the same coordinator:
 
 ## Intersection with reusable package extraction
 
-The extraction proposal identifies `universal_robots_clients` and `opcua_method_server`. The multi-protocol architecture adds an RTDE module to the Universal
-Robots distribution and materially affects the eventual OPC UA package.
+The extraction proposal identifies `declarative_opcua_server` and `universal_robots_clients`. The declarative OPC UA package is extracted first with generic
+folders, objects, methods, and variables; this architecture later consumes those primitives without moving robot invocation policy into that package. The
+multi-protocol work also adds an RTDE module to the Universal Robots distribution after its contract is proven in the gateway.
 
-- `universal_robots_clients.dashboard` becomes the lifecycle adapter rather than the complete robot-control API. Extract it first with direct host, port,
+- `declarative_opcua_server` is the first extraction. Complete and test its bounded generic API before implementing parameterized invocation.
+- `universal_robots_clients.dashboard` becomes the lifecycle adapter rather than the complete robot-control API. Extract it later with direct host, port,
   timeout, and command functions.
 - `universal_robots_clients.program_discovery` remains independent of execution and argument transport. Extract it after separating discovery from gateway
   `Args` and SSH policy.
 - `universal_robots_clients.rtde` provides reusable RTDE protocol access without owning invocation workflow. Add it after proving its contract inside the
   gateway.
-- `opcua_method_server` is affected by the need for writable variables, status nodes, and possibly events as well as methods. Delay its final API until the
-  invocation address space is proven.
 
 ### Dashboard module
 
@@ -321,27 +321,25 @@ require it.
 
 ### OPC UA package scope
 
-The original `opcua_method_server` proposal maps a nested dictionary of callables into OPC UA methods. The invocation design introduces additional generic node
-types:
+The selected `declarative_opcua_server` boundary creates a synchronous OPC UA server from explicit folder, object, method, and variable descriptors. Its
+version-one contract is completed and extracted before this invocation design. It includes the generic capabilities this design can already predict with
+confidence:
 
-- Writable argument variables.
-- Read-only state and result variables.
-- Stable objects and folders.
-- Methods generated from typed schemas.
-- Possibly events for state transitions.
+- Synchronous methods generated from supported Python signatures.
+- Read-only and writable variables backed by consumer-owned access functions.
+- Explicit folders and objects.
+- Primitive scalar and homogeneous array metadata.
+- Optional stable NodeIds, deterministic construction, and predictable failure-to-status behavior.
 
-There are two possible package boundaries:
+The package does not own task schemas, invocation identifiers, staged and active snapshots, high-level `invoke()` behavior, or RTDE mappings. Those semantics
+remain in the gateway. The gateway translates its task model into the package's generic descriptors and supplies the callables that execute coordinator policy.
 
-1. Keep `opcua_method_server` deliberately method-only and let the gateway create variables and events directly with `asyncua`.
-1. Broaden it into a small declarative OPC UA interface package that can create objects, folders, methods, variables, and event sources from explicit
-   descriptors.
+Events are deliberately not a prerequisite for the first extraction. If the invocation implementation demonstrates that OPC UA events materially improve state
+reporting, an event-source descriptor can be added to the reusable package through a separately tested API. Until then, clients can read or subscribe to the
+state variables supplied by version one.
 
-The first option keeps the package narrow but leaves substantial OPC UA construction in the gateway. The second better supports a very small gateway
-composition, but risks becoming an overgeneralized OPC UA framework.
-
-The recommendation is to delay extraction of `_07_expose_program_commands_via_opcua` until one real invocation design is implemented locally. Extract the
-smallest declarative model proven by that implementation. If variables and events are required, reconsider the package name; `opcua_interface_server` or
-`declarative_opcua_server` would be more accurate than `opcua_method_server`.
+This ordering lets the package become useful immediately without claiming to predict the final robot address space. Its descriptor API is extensible, but its
+first release remains a small adapter over `asyncua` rather than a general schema framework.
 
 ### RTDE module
 
@@ -355,9 +353,9 @@ Responsibilities:
     connection health and reconnect behavior
 ```
 
-It should begin inside the gateway. Moving it immediately would force a public API before the register contract, invocation state machine, and robot-side
-program conventions are proven. Once stable, the module may own generic register and connection behavior, while commit semantics, acknowledgement workflow, and
-task policy remain in the gateway coordinator.
+It should begin in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`. Moving it immediately would force a public API before the register
+contract, invocation state machine, and robot-side program conventions are proven. Once stable, the RTDE behavior should move into its own
+`universal_robots_clients.rtde` module, while commit semantics, acknowledgement workflow, and task policy remain in the gateway coordinator.
 
 ### What remains in the gateway
 
@@ -380,7 +378,7 @@ as a separate library.
 
 ```mermaid
 flowchart TD
-    Gateway["ur_robot_to_opcua_gateway"] --> OpcPackage["OPC UA interface package"]
+    Gateway["ur_robot_to_opcua_gateway"] --> OpcPackage["declarative_opcua_server"]
     Gateway --> UrClients["universal_robots_clients"]
 
     UrClients --> DashboardModule["dashboard module"]
@@ -443,7 +441,8 @@ Each extracted package owns protocol-focused tests:
 - `universal_robots_clients.dashboard`: framing, command construction, responses, timeouts, and connection failures.
 - `universal_robots_clients.program_discovery`: local and SFTP traversal, filtering, normalization, optional dependencies, and errors.
 - `universal_robots_clients.rtde`: recipes, register codecs, handshake transitions, ownership, disconnects, and reconnects.
-- OPC UA package: declarative node creation, method signatures, variable access, events, namespaces, and security defaults.
+- `declarative_opcua_server`: descriptor validation, deterministic node creation, method signatures, variable access, NodeIds, namespaces, lifecycle, failure
+  statuses, security defaults, real-client contracts, and clean installation from built distributions. Event tests move here if an event API is added later.
 
 ### Gateway tests
 
@@ -479,21 +478,23 @@ grant permission to stage arguments, start programs, cancel work, or stop the ro
 
 ## Revised implementation and extraction order
 
-The package proposal and multi-protocol change should be implemented in an order that avoids stabilizing the wrong APIs:
+Package extraction and the multi-protocol change should be implemented in distinct phases:
 
+1. Complete the bounded `declarative_opcua_server` descriptor, type, lifecycle, status, and security-default contracts inside this repository.
+1. Add its unit, real-client integration, failure, NodeId, and distribution-installation tests.
+1. Extract and publish `declarative_opcua_server`, then make this gateway consume a built release while preserving the complete URSim pipeline.
 1. Define the protocol-neutral invocation state machine, task schema, and capability boundaries inside the gateway.
-1. Refactor current Dashboard and discovery code to accept direct configuration while preserving behavior.
-1. Create `universal_robots_clients` and extract Dashboard into its `dashboard` module.
-1. Add program discovery as `universal_robots_clients.program_discovery` with optional SFTP dependencies.
-1. Implement the RTDE register contract and robot-side handshake inside the gateway.
-1. Add real URSim tests for arguments, acknowledgement, and both execution strategies.
-1. Move the proven RTDE adapter into `universal_robots_clients.rtde` rather than creating a separate distribution.
-1. Extend the local OPC UA adapter with the variables, methods, state, and events required by the proven invocation model.
-1. Extract the smallest useful OPC UA package from that implementation, choosing its final name from its actual scope.
+1. Implement the RTDE register contract and robot-side handshake in `_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`.
+1. Use `declarative_opcua_server` descriptors to expose the required argument, method, and state nodes without adding robot policy to that package.
+1. Add real URSim tests for arguments, acknowledgement, failure behavior, and both execution strategies.
+1. Create `universal_robots_clients`, extracting Dashboard and program discovery into independent modules with direct configuration and optional SFTP
+   dependencies.
+1. Move the proven RTDE behavior into `universal_robots_clients.rtde` rather than creating a separate distribution.
 1. Rename the gateway after the second robot-facing protocol is part of the supported product.
 
-Dashboard and discovery extraction can begin before RTDE because their responsibilities are already clear. OPC UA extraction should wait because program
-arguments may change its abstraction from method-only exposure to declarative address-space construction.
+The first extraction does not require the invocation address space to be final. The reusable package owns generic OPC UA construction; the gateway owns the
+meaning and coordination of the nodes it asks the package to construct. Dashboard and discovery extraction can follow independently, while RTDE extraction still
+waits for a proven register and connection contract.
 
 ## Naming
 
@@ -518,16 +519,19 @@ the gateway product.
 - Whether the gateway uses an existing maintained RTDE library or a narrow local implementation.
 - Robot-side acknowledgement, completion, cancellation, and error conventions.
 - Restart reconciliation and idempotency behavior.
-- Whether OPC UA invocation state uses variables, events, method results, or a combination.
-- Whether the extracted OPC UA package remains method-only or becomes a declarative interface server.
+- Whether OPC UA invocation state uses variables, events, method results, or a combination. This affects how the gateway consumes the extracted package, not
+  whether the package is extracted first.
+- Whether the first invocation release justifies adding a generic event-source descriptor to `declarative_opcua_server`.
 - The point at which the gateway and repository are renamed.
 - The evidence required before moving the RTDE adapter into `universal_robots_clients.rtde`.
 
 ## Recommendation
 
-Adopt the capability-based multi-protocol architecture and prove Dashboard plus RTDE inside this gateway. Extract Dashboard and program discovery into separate
-modules of `universal_robots_clients`; keep RTDE local until its reusable contract is proven, then add it to the same distribution. Delay the OPC UA package
-until parameterized invocation demonstrates the node model it actually needs.
+Extract the bounded `declarative_opcua_server` package first, then adopt the capability-based multi-protocol architecture and prove Dashboard plus RTDE inside
+this gateway. The package supplies generic methods, variables, folders, and objects; the gateway retains task schemas and invocation coordination.
+
+Afterward, extract Dashboard and program discovery into separate modules of `universal_robots_clients`; keep RTDE local until its reusable contract is proven,
+then add it to the same distribution.
 
 This approach keeps the current modularity, avoids coupling OPC UA clients to robot protocol details, and lets the product grow from a Dashboard bridge into a
 general UR robot integration gateway without turning every internal abstraction into a package prematurely.

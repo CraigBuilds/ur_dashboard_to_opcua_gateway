@@ -139,10 +139,11 @@ mechanism. The invocation coordinator should be able to use interchangeable robo
 - Fieldbus or PLC registers.
 - Another explicitly designed robot communication mechanism.
 
-The server should generate writable argument nodes and typed `invoke(...)` method inputs from one declarative schema supplied at startup. The schema source
-could be gateway configuration, a companion metadata file beside each program, or a separately managed task manifest; this must be decided before
-implementation. Program discovery should continue to find `.urp` files without requiring metadata, while parameterized invocation is enabled only for programs
-or dispatcher tasks with a valid schema.
+The gateway should generate writable argument nodes and typed `invoke(...)` method inputs from one declarative task schema supplied at startup. It should use
+the generic folders, objects, methods, and variables provided by `declarative_opcua_server`, while retaining ownership of task validation, invocation state, and
+robot-transport coordination. The schema source could be gateway configuration, a companion metadata file beside each program, or a separately managed task
+manifest; this must be decided before implementation. Program discovery should continue to find `.urp` files without requiring metadata, while parameterized
+invocation is enabled only for programs or dispatcher tasks with a valid schema.
 
 The design phase must also resolve:
 
@@ -162,8 +163,16 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 
 ### Reusable Python packages
 
-- Evaluate extracting the generic capabilities into two independently installable distributions: an OPC UA callable-to-method server and
-  `universal_robots_clients`, with separate Dashboard, program-discovery, and eventual RTDE modules.
+- Proceed with two independently installable distributions: `declarative_opcua_server` and `universal_robots_clients`.
+- Extract `declarative_opcua_server` first. Its bounded version-one API should cover explicit folders and objects, synchronous methods, read-only and writable
+  variables, supported primitive scalar and homogeneous array types, optional stable NodeIds, server configuration and lifecycle, and predictable failure
+  handling.
+- Treat that first package as complete only when real OPC UA clients can browse, call, read, and write through its documented API; invalid definitions and
+  lifecycle failures are tested; built wheels and source distributions install cleanly; and the gateway's full URSim pipeline passes against the artifact.
+- Keep robot task schemas, invocation identifiers, staged and active values, RTDE mappings, and execution policy in this gateway. Add a generic event-source
+  descriptor to the package later only if the implemented invocation model demonstrates a concrete need.
+- Establish `universal_robots_clients` afterward, with separate Dashboard and program-discovery modules and an eventual RTDE module added only after its
+  connection and register contract is proven here.
 - Decouple each package from gateway `Args`, UR20-specific OPC UA names, application command dictionaries, shortcut policy, password prompting, and process
   lifecycle.
 - Keep this repository as the product-specific composition layer that installs the packages with `pip`, selects configuration and execution policy, builds the
@@ -173,6 +182,17 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 
 See [reusable package extraction](reusable-package-extraction.md) for the proposed package APIs, boundaries, test ownership, release strategy, and extraction
 order.
+
+### Project naming
+
+- Rename the project once RTDE or another second robot-facing protocol works end to end, because `ur_dashboard_to_opcua_gateway` will no longer describe the
+  complete product boundary.
+- Use `ur_robot_to_opcua_gateway` as the preferred working replacement unless implementation experience reveals a clearer name.
+- Make the rename one coordinated migration covering the repository, Python distribution and import package, console command, Docker image, OPC UA server name,
+  documentation, tests, and CI references.
+- Keep the current name while the product remains the Dashboard-only MVP so published names continue to describe implemented behavior.
+
+See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md#naming) for the naming rationale and other candidates.
 
 ### Reliability and command safety
 

@@ -18,7 +18,7 @@ import asyncua.sync
 
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_via_dashboard as control_ur_programs_via_dashboard
+import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
 import ur_dashboard_to_opcua_gateway._06_combine_program_discovery_and_control as combine_program_discovery_and_control
 import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as expose_program_commands_via_opcua
 
@@ -31,7 +31,7 @@ def compose_gateway(args: parse_command_line_args.Args) -> asyncua.sync.Server:
     Used by ``_01_main.main()``.
     """
     discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
-    dashboard_commands = control_ur_programs_via_dashboard.create_dashboard_commands(args)
+    dashboard_commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
     command_registry = combine_program_discovery_and_control.create_command_registry(discover_programs_function, dashboard_commands)
 
     return expose_program_commands_via_opcua.create_server(command_registry, args.opcua_endpoint)

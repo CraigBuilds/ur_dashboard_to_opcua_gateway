@@ -162,8 +162,8 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 
 ### Reusable Python packages
 
-- Evaluate extracting the generic capabilities into independently installable packages: an OPC UA callable-to-method server, a Universal Robots Dashboard
-  client, and a Universal Robots program-discovery library.
+- Evaluate extracting the generic capabilities into two independently installable distributions: an OPC UA callable-to-method server and
+  `universal_robots_clients`, with separate Dashboard, program-discovery, and eventual RTDE modules.
 - Decouple each package from gateway `Args`, UR20-specific OPC UA names, application command dictionaries, shortcut policy, password prompting, and process
   lifecycle.
 - Keep this repository as the product-specific composition layer that installs the packages with `pip`, selects configuration and execution policy, builds the

@@ -28,6 +28,8 @@ jobs:
       - name: Install unit-test dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e "./packages/declarative_opcua_server[test]"
+          python -m pip install -e "./packages/universal_robots_clients[test]"
           python -m pip install -e "./code[test]"
 
       - name: Run architecture and unit tests
@@ -51,12 +53,14 @@ jobs:
       - name: Install formatting dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e "./packages/declarative_opcua_server"
+          python -m pip install -e "./packages/universal_robots_clients"
           python -m pip install -e "./code[format]"
 
       - name: Check formatting
         run: |
-          python -m black --config code/pyproject.toml --check code/src tests
-          python -m mdformat --check --wrap 160 README.md AGENTS.md docs tests/README.md
+          python -m black --config code/pyproject.toml --check code/src packages tests
+          python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/README.md packages/universal_robots_clients/README.md tests/README.md
 
   system:
     runs-on: ubuntu-latest
@@ -73,6 +77,8 @@ jobs:
       - name: Install system-test dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e "./packages/declarative_opcua_server"
+          python -m pip install -e "./packages/universal_robots_clients[sftp]"
           python -m pip install -e "./code[system-test]"
 
       - name: Run system tests

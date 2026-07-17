@@ -20,7 +20,7 @@ class RobotLab:
         """Configure paths and service state."""
         self.programs = programs
         self.repository = pathlib.Path(__file__).resolve().parents[2]
-        self.project = self.repository / "code"
+        self.project = self.repository
         self._stack = contextlib.ExitStack()
         self.ursim: ursim_container.UrSimContainer
         self.sftp: openssh_container.OpenSshContainer
@@ -32,7 +32,7 @@ class RobotLab:
         network_context = tc_network.Network()
         network = self._stack.enter_context(network_context)
         gateway_tag = f"ur_dashboard_to_opcua_gateway_test:{suffix}"
-        gateway_context = tc_image.DockerImage(self.project, tag=gateway_tag, clean_up=True)
+        gateway_context = tc_image.DockerImage(self.project, tag=gateway_tag, clean_up=True, dockerfile_path="code/Dockerfile")
         gateway_image = self._stack.enter_context(gateway_context)
         ssh_context_path = self.repository / "tests" / "system" / "docker" / "openssh"
         ssh_tag = f"ur-program-openssh-test:{suffix}"

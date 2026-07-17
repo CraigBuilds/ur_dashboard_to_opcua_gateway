@@ -1,20 +1,18 @@
 """Assemble the gateway's concrete dependencies without starting the process.
 
 This module is the composition root: the one place that knows every feature module and connects them in runtime order. It binds ``Args`` to program discovery
-with ``functools.partial``, creates Dashboard command functions, combines both sets of operations into the complete application command registry, and asks the
+with ``functools.partial``, creates configured Dashboard functions, combines those dependencies into flat status, parameter, and method interfaces, and asks the
 OPC UA adapter to expose the result.
 
-The sole public API is ``compose_gateway(args)``. It returns a fully configured but unstarted synchronous ``asyncua`` server; ``_01_main`` remains responsible
-for entering the server context, waiting for process signals, and shutting it down. This separation makes composition independently testable and keeps lifecycle
-policy out of the application modules.
+The sole public API is ``compose_gateway(args)``. It returns a fully configured but unstarted managed server; ``_01_main`` remains responsible for entering the
+server context, waiting for process signals, and shutting it down. This separation makes composition independently testable and keeps lifecycle policy out of
+the feature modules.
 
 Dependencies flow from this module to ``_02_parse_command_line_args`` and each feature module from ``_04`` through ``_07``. Those modules do not import the
 composition root, so concrete wiring remains centralized and the rest of the codebase can stay focused on one concern at a time.
 """
 
 import functools
-
-import asyncua.sync
 
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
@@ -25,13 +23,13 @@ import ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua as ex
 __all__ = ["compose_gateway"]
 
 
-def compose_gateway(args: parse_command_line_args.Args) -> asyncua.sync.Server:
+def compose_gateway(args: parse_command_line_args.Args) -> object:
     """Compose and return the configured gateway server.
 
     Used by ``_01_main.main()``.
     """
     discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
     dashboard_commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
-    command_registry = combine_program_discovery_and_control.create_command_registry(discover_programs_function, dashboard_commands)
+    interfaces = combine_program_discovery_and_control.create_interfaces(discover_programs_function, dashboard_commands)
 
-    return expose_program_commands_via_opcua.create_server(command_registry, args.opcua_endpoint)
+    return expose_program_commands_via_opcua.create_server(interfaces, args.opcua_endpoint)

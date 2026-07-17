@@ -7,7 +7,6 @@ import pathlib
 import typing
 import xml.etree.ElementTree
 
-import asyncua.ua
 import pytest
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
@@ -21,22 +20,15 @@ import tests.support.program_fixture as program_fixture
 
 
 def test_local_catalogue(tmp_path: pathlib.Path) -> None:
-    """Discover URP files case-insensitively and preserve relative paths."""
+    """Select package-backed local discovery and preserve relative paths."""
     nested = tmp_path / "Production"
     nested.mkdir()
     (tmp_path / "Main.urp").touch()
     (nested / "Pick.URP").touch()
     (tmp_path / "notes.txt").touch()
     args = parse_command_line_args.Args(catalog="local", programs_folder=str(tmp_path))
-    programs = discover_ur_programs.discover_programs(args)
 
-    assert programs == ["Main.urp", "Production/Pick.URP"]
-
-
-def test_dashboard_rejects_newline() -> None:
-    """Reject embedded Dashboard commands before opening a connection."""
-    with pytest.raises(ValueError):
-        control_ur_programs_and_exchange_parameters.send_command("127.0.0.1", 29999, "play\nstop")
+    assert discover_ur_programs.discover_programs(args) == ["Main.urp", "Production/Pick.URP"]
 
 
 def test_local_command_line_args() -> None:
@@ -57,24 +49,22 @@ def test_sftp_command_line_args(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_component_configuration(tmp_path: pathlib.Path) -> None:
-    """Configure discovery and Dashboard functions from arguments."""
+    """Configure discovery and Dashboard functions with interface-ready signatures."""
     args = parse_command_line_args.Args(catalog="local", programs_folder=str(tmp_path), dashboard_host="dashboard", dashboard_port=30000)
     discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
     dashboard_commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
 
     assert discover_programs_function() == []
-    assert set(dashboard_commands) == {"load", "start", "pause", "stop", "status"}
-    assert list(inspect.signature(dashboard_commands["load"]).parameters) == ["program"]
-    assert all(not inspect.signature(dashboard_commands[name]).parameters for name in ("start", "pause", "stop", "status"))
-    output = expose_program_commands_via_opcua._output_arguments(discover_programs_function)
-    assert output[0].ValueRank == asyncua.ua.ValueRank.OneDimension
+    assert set(dashboard_commands) == {"load_program", "play_program", "pause_program", "stop_program", "get_program_state"}
+    assert list(inspect.signature(dashboard_commands["load_program"]).parameters) == ["program"]
+    assert all(not inspect.signature(dashboard_commands[name]).parameters for name in ("play_program", "pause_program", "stop_program", "get_program_state"))
 
 
 def test_compose_gateway_wires_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Compose configured functions and return the configured server."""
+    """Compose configured functions, flat interfaces, and the application server."""
     args = parse_command_line_args.Args(catalog="local")
-    dashboard_commands = {}
-    command_registry = combine_program_discovery_and_control.CommandRegistry(commands={}, program_operations={})
+    dashboard_commands: control_ur_programs_and_exchange_parameters.DashboardCommands = {}
+    interfaces = combine_program_discovery_and_control.GatewayInterfaces({}, {}, {})
     server = object()
     discovery_functions: typing.List[typing.Callable[[], typing.List[str]]] = []
     server_calls: typing.List[typing.Tuple[object, str]] = []
@@ -85,40 +75,39 @@ def test_compose_gateway_wires_dependencies(monkeypatch: pytest.MonkeyPatch) -> 
 
         return []
 
-    def create_command_registry(
+    def create_interfaces(
         actual_discovery: typing.Callable[[], typing.List[str]], actual_dashboard_commands: control_ur_programs_and_exchange_parameters.DashboardCommands
-    ) -> combine_program_discovery_and_control.CommandRegistry:
-        """Capture the configured discovery function."""
+    ) -> combine_program_discovery_and_control.GatewayInterfaces:
+        """Capture the configured dependencies."""
         assert actual_dashboard_commands is dashboard_commands
         discovery_functions.append(actual_discovery)
 
-        return command_registry
+        return interfaces
 
-    def create_server(actual_registry: combine_program_discovery_and_control.CommandRegistry, endpoint: str) -> object:
-        """Capture the composed command registry."""
-        server_calls.append((actual_registry, endpoint))
+    def create_server(actual_interfaces: combine_program_discovery_and_control.GatewayInterfaces, endpoint: str) -> object:
+        """Capture the composed interfaces."""
+        server_calls.append((actual_interfaces, endpoint))
 
         return server
 
     monkeypatch.setattr(discover_ur_programs, "discover_programs", configured_discovery)
     monkeypatch.setattr(control_ur_programs_and_exchange_parameters, "create_dashboard_commands", lambda actual: dashboard_commands)
-    monkeypatch.setattr(combine_program_discovery_and_control, "create_command_registry", create_command_registry)
+    monkeypatch.setattr(combine_program_discovery_and_control, "create_interfaces", create_interfaces)
     monkeypatch.setattr(expose_program_commands_via_opcua, "create_server", create_server)
 
     result = compose_gateway.compose_gateway(args)
 
     assert result is server
-    assert server_calls == [(command_registry, args.opcua_endpoint)]
+    assert server_calls == [(interfaces, args.opcua_endpoint)]
     assert len(discovery_functions) == 1
     configured_discovery_function = discovery_functions[0]
     assert isinstance(configured_discovery_function, functools.partial)
     assert configured_discovery_function.func is configured_discovery
     assert configured_discovery_function.args == (args,)
-    assert configured_discovery_function() == []
 
 
 def test_main_owns_process_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Parse, compose, and run the server from the executable entry point."""
+    """Parse, compose, and run the managed server from the executable entry point."""
     args = parse_command_line_args.Args(catalog="local")
     server = object()
     started: typing.List[object] = []

@@ -1,81 +1,89 @@
-"""Build the transport-independent application command model.
+"""Combine discovery and robot control into the gateway's three flat interfaces.
 
-This module sits between concrete program operations and the OPC UA adapter. ``create_command_registry()`` combines a zero-argument discovery function with the
-configured Dashboard functions under stable command names. It also runs discovery during gateway composition and creates bound ``load`` and ``run`` functions
-for every program, preserving directory paths for the presentation layer. A per-program ``run`` currently performs load followed by play and returns both raw
-Dashboard responses; response validation, atomicity, and cross-client serialization are planned beyond the MVP.
+``create_interfaces()`` discovers programs during composition and creates one no-argument start method for each program. It also adds robot-wide pause and stop
+methods, publishes the Dashboard program state as a status getter, and leaves the parameter interface empty until the RTDE invocation contract is implemented.
+All names are flat because the declarative OPC UA package supplies the fixed ``Status``, ``Parameters``, and ``Methods`` containers.
 
-The public API consists of ``create_command_registry()`` and the ``Command``, ``CommandResult``, and ``CommandRegistry`` types that describe its result. The
-registry is one application model containing generic commands and per-program operations. Network access and OPC UA concepts are intentionally absent from this
-layer.
+Program start functions implement the gateway-specific load-then-play policy while reusable Dashboard functions remain protocol primitives. Program paths are
+converted into deterministic method names such as ``StartProgram_Production_PickPart``; collisions are rejected instead of silently losing a program during
+dictionary construction.
 
-Its only package dependency is ``_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde`` for the Dashboard command dictionary type. Discovery
-is accepted as a callable instead of imported directly, allowing the composition root to supply configured behaviour and keeping this module straightforward to
-test.
+The public API consists of the immutable ``GatewayInterfaces`` dataclass and ``create_interfaces()``. This module accepts ordinary functions and mappings, so it
+does not import discovery, Dashboard, RTDE, OPC UA, or command-line modules. The composition root supplies all concrete dependencies.
 """
 
 import dataclasses
 import functools
+import pathlib
+import re
 import typing
 
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
+_Command = typing.Callable[..., str]
+_DashboardCommands = typing.Mapping[str, _Command]
+_MethodFunction = typing.Callable[[], None]
+_StatusFunction = typing.Callable[[], typing.Any]
+_ParameterFunction = typing.Callable[..., None]
+_MethodInterface = typing.Dict[str, _MethodFunction]
+_StatusInterface = typing.Dict[str, _StatusFunction]
+_ParameterInterface = typing.Dict[str, _ParameterFunction]
 
-CommandResult = typing.Union[str, typing.List[str]]
-Command = typing.Callable[..., CommandResult]
-_Commands = typing.Dict[str, Command]
-_ProgramOperations = typing.Dict[str, _Commands]
+__all__ = ["GatewayInterfaces", "create_interfaces"]
 
 
 @dataclasses.dataclass(frozen=True)
-class CommandRegistry:
-    """Hold all transport-independent commands exposed by the gateway.
+class GatewayInterfaces:
+    """Hold the flat status, parameter, and method interfaces exposed by OPC UA.
 
-    Used by ``_03_compose_gateway.compose_gateway()`` and
-    ``_07_expose_program_commands_via_opcua.create_server()``.
+    Used by ``_03_compose_gateway.compose_gateway()`` and ``_07_expose_program_commands_via_opcua.create_server()``.
     """
 
-    commands: _Commands
-    program_operations: _ProgramOperations
+    status_interface: _StatusInterface
+    parameter_interface: _ParameterInterface
+    method_interface: _MethodInterface
 
 
-__all__ = ["Command", "CommandRegistry", "CommandResult", "create_command_registry"]
+def _run_program(load_program: _Command, play_program: _Command, program: str) -> None:
+    """Load and then play one discovered program."""
+    load_program(program)
+    play_program()
 
 
-def _run_program(load: Command, start: Command, program: str) -> str:
-    """Load and then start one program."""
-    loaded = load(program)
-    started = start()
-
-    return f"{loaded}; {started}"
+def _run_command(command: _Command) -> None:
+    """Run one response-returning Dashboard command as a no-result method."""
+    command()
 
 
-def create_command_registry(
-    discover_programs: typing.Callable[[], typing.List[str]], dashboard_commands: control_ur_programs_and_exchange_parameters.DashboardCommands
-) -> CommandRegistry:
-    """Build the complete application command model.
+def _program_method_name(program: str) -> str:
+    """Convert a relative URP path into one deterministic flat method name."""
+    path = pathlib.PurePosixPath(program)
+    parts = path.with_suffix("").parts
+    normalized = (re.sub(r"[^A-Za-z0-9]+", "_", part).strip("_") for part in parts)
+    meaningful = [part for part in normalized if part]
+
+    if not meaningful:
+        raise ValueError(f"Program path cannot produce a method name: {program!r}")
+
+    return "StartProgram_" + "_".join(meaningful)
+
+
+def create_interfaces(discover_programs: typing.Callable[[], typing.List[str]], dashboard_commands: _DashboardCommands) -> GatewayInterfaces:
+    """Create the complete flat gateway interfaces from configured dependencies.
 
     Used by ``_03_compose_gateway.compose_gateway()``.
     """
-    commands: _Commands = {"programs": discover_programs, **dashboard_commands}
+    programs = discover_programs()
+    load_program = dashboard_commands["load_program"]
+    play_program = dashboard_commands["play_program"]
+    program_methods = {_program_method_name(program): functools.partial(_run_program, load_program, play_program, program) for program in programs}
 
-    return CommandRegistry(commands=commands, program_operations=_create_program_operations(commands))
+    if len(program_methods) != len(programs):
+        raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
 
+    method_interface: _MethodInterface = {
+        **program_methods,
+        "PauseProgram": functools.partial(_run_command, dashboard_commands["pause_program"]),
+        "StopProgram": functools.partial(_run_command, dashboard_commands["stop_program"]),
+    }
+    status_interface: _StatusInterface = {"ProgramState": dashboard_commands["get_program_state"]}
 
-def _create_program_operations(commands: _Commands) -> _ProgramOperations:
-    """Create no-argument load and run commands for every discovered program."""
-    result = commands["programs"]()
-
-    if not isinstance(result, list):
-        message = "The programs command must return a list."
-        raise TypeError(message)
-
-    load = commands["load"]
-    start = commands["start"]
-    program_operations: _ProgramOperations = {}
-
-    for program in result:
-        load_one = functools.partial(load, program)
-        run_one = functools.partial(_run_program, load, start, program)
-        program_operations[program] = {"load": load_one, "run": run_one}
-
-    return program_operations
+    return GatewayInterfaces(status_interface=status_interface, parameter_interface={}, method_interface=method_interface)

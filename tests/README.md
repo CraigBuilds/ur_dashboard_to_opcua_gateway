@@ -1,64 +1,55 @@
 # Test Suites
 
-The repository has three executable test types. Folder selection makes each type independently runnable, while the `system` marker keeps Docker-backed tests out
-of the Python 3.8-compatible default suite.
+Reusable behavior is tested inside each package project, while this directory owns cross-repository conventions, gateway policy, support fixtures, and the full
+system contract.
+
+## Package tests
+
+```text
+packages/declarative_opcua_server/tests/  Real-client OPC UA API and validation tests
+packages/universal_robots_clients/tests/  Dashboard and program-discovery tests
+```
+
+Both are collected by `tests/pytest.ini` so one command runs the complete non-container contract.
 
 ## Architecture tests
 
-`architecture/` contains static repository checks. These tests parse source files with `ast` and enforce project-wide conventions such as module docstrings,
-argument help text, namespace-qualified imports, documented public consumers, and the functional rule that production classes are dataclasses.
+`architecture/` parses every production and test module across all three distributions. It enforces module docstrings, parser help text, namespace-qualified
+imports, documented public consumers, and the functional convention that production classes are dataclasses.
 
-They do not execute the gateway or require external services:
+## Gateway unit tests
 
-```bash
-python -m pytest -c tests/pytest.ini tests/architecture
-```
-
-## Unit tests
-
-`unit/` contains isolated component, behavior, validation, composition, protocol, and lifecycle tests. External boundaries are represented by temporary files,
-monkeypatches, and deterministic fakes, so these tests require neither Docker nor network access:
-
-```bash
-python -m pytest -c tests/pytest.ini tests/unit
-```
+`unit/` tests command-line resolution, package adapters, flat interface construction, composition, process lifecycle, deterministic program fixtures, and the
+system-test runner with fakes and temporary files.
 
 ## System tests
 
-`system/` contains the Docker-backed full-system tests and everything private to that harness. The suite builds and starts the gateway, URSim, and OpenSSH, then
-uses a real OPC UA client to verify both local and SFTP catalogue paths through to Dashboard program execution.
+`system/` builds and starts the three installed distributions, URSim, and OpenSSH, then uses a real OPC UA client to verify local and SFTP discovery through to
+Dashboard program execution. These tests are both integration and end-to-end coverage.
 
-These tests also serve as the current integration and end-to-end coverage. There is no separate integration suite because the project does not yet have a useful
-middle-sized boundary that warrants another category.
-
-Run the prepared system-test workflow with:
-
-```bash
-python tests/system/run.py
-```
-
-## Support code
-
-`support/` is not a fourth test type. It contains deterministic program fixtures and polling helpers shared by executable suites. Likewise, `system/containers/`
-and `system/docker/` are implementation details of the system-test harness rather than independently collected tests.
-
-## Complete layout
+## Layout
 
 ```text
 tests/
-    architecture/    Repository structure and convention checks
-    unit/            Fast isolated tests
-    system/          Docker-backed integration and end-to-end tests
-        containers/  Python wrappers around disposable services
-        docker/      Docker build contexts owned by the system harness
-    support/         Shared fixtures and test utilities
-    pytest.ini       Test discovery, paths, and markers
+    architecture/    Repository and API convention checks
+    unit/            Gateway policy and composition tests
+    system/          Docker-backed compatibility and end-to-end tests
+        containers/  Disposable service wrappers
+        docker/      OpenSSH test image
+    support/         Shared deterministic fixtures and waiting helpers
+    pytest.ini       Package and gateway discovery paths and markers
 ```
 
-Run every non-container test with:
+Run everything except Docker:
 
 ```bash
 python -m pytest -c tests/pytest.ini -m "not system"
 ```
 
-See [the complete testing guide](../docs/testing.md) for installation, formatting, Docker requirements, and CI behavior.
+Run the prepared real pipeline:
+
+```bash
+python tests/system/run.py
+```
+
+See [the complete testing guide](../docs/testing.md) for installation, focused commands, Docker requirements, and CI behavior.

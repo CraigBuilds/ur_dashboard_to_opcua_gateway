@@ -167,10 +167,9 @@ def _create_virtual_environment(command: typing.Sequence[str], environment: path
     return python
 
 
-def _copy_package_for_install(repository: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
-    """Copy package sources so dependency installation leaves the repository clean."""
-    source = repository / "code"
-    target = destination / "code"
+def _copy_project_for_install(source: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+    """Copy one distribution so dependency installation leaves its source tree clean."""
+    target = destination / source.name
     ignored = shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "dist")
     shutil.copytree(str(source), str(target), ignore=ignored)
 
@@ -182,9 +181,13 @@ def _install_dependencies(python: pathlib.Path, repository: pathlib.Path) -> Non
     _run([str(python), "-m", "pip", "install", "--upgrade", "pip"], repository)
 
     with tempfile.TemporaryDirectory(prefix="ur_dashboard_to_opcua_gateway_system_tests_") as temporary:
-        package = _copy_package_for_install(repository, pathlib.Path(temporary))
-        requirement = f"{package}[system-test]"
-        _run([str(python), "-m", "pip", "install", requirement], repository)
+        destination = pathlib.Path(temporary)
+        opcua_package = _copy_project_for_install(repository / "packages" / "declarative_opcua_server", destination)
+        robot_clients_package = _copy_project_for_install(repository / "packages" / "universal_robots_clients", destination)
+        gateway_package = _copy_project_for_install(repository / "code", destination)
+        _run([str(python), "-m", "pip", "install", str(opcua_package)], repository)
+        _run([str(python), "-m", "pip", "install", f"{robot_clients_package}[sftp]"], repository)
+        _run([str(python), "-m", "pip", "install", f"{gateway_package}[system-test]"], repository)
 
 
 def _test_environment() -> typing.Dict[str, str]:

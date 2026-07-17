@@ -1,53 +1,63 @@
 # Testing
 
-## Test types
+## Test ownership
 
-The executable tests are organized by scope:
+Executable tests are organized by both distribution ownership and scope:
 
-- `tests/architecture/` statically enforces repository and API conventions.
-- `tests/unit/` exercises components and behavior in isolation with deterministic fakes.
-- `tests/system/` verifies the complete gateway with real URSim, OpenSSH, gateway, and OPC UA containers.
+- `packages/declarative_opcua_server/tests/` verifies the standalone OPC UA API with validation tests and a real asyncua client.
+- `packages/universal_robots_clients/tests/` verifies Dashboard framing and local/SFTP discovery with deterministic fakes.
+- `tests/architecture/` statically enforces conventions across all three distributions and their tests.
+- `tests/unit/` verifies gateway configuration, adapters, interface policy, composition, and lifecycle.
+- `tests/system/` verifies the installed distributions together with real URSim, OpenSSH, the gateway container, and an OPC UA client.
 
-`tests/support/` contains shared fixtures and utilities; it is support code, not a separate test type. The system suite currently provides both integration and
-end-to-end coverage, so there is no separate integration-test folder. See [the test-suite README](../tests/README.md) for the complete layout and focused
-commands.
+`tests/support/` contains shared fixtures and is not another test type.
 
-## Commands
+## Installation
 
-Install the Python 3.8-compatible unit-test and formatting dependencies from the repository root:
+Install the local distributions and development tools from the repository root:
 
 ```bash
-python -m pip install -e "./code[test,format]"
+python -m pip install -e "./packages/declarative_opcua_server[test]"
+python -m pip install -e "./packages/universal_robots_clients[sftp,test]"
+python -m pip install -e "./code[sftp,test,format]"
 ```
 
-The unit suite uses deterministic transport fakes and does not require the optional SFTP dependency. Install `./code[sftp,test,format]` when developing or
-manually exercising the SFTP catalogue as well.
-
-Run the non-container suite:
+Run every non-container test:
 
 ```bash
 python -m pytest -c tests/pytest.ini -m "not system"
 ```
 
-On Python 3.10 or later, install the system-test dependencies:
+Focused package and gateway commands are:
 
 ```bash
-python -m pip install -e "./code[system-test]"
+python -m pytest -c tests/pytest.ini packages/declarative_opcua_server/tests
+python -m pytest -c tests/pytest.ini packages/universal_robots_clients/tests
+python -m pytest -c tests/pytest.ini tests/architecture tests/unit
 ```
 
-Run all tests:
+The non-container suite supports Python 3.8.3 and later. CI runs it on Python 3.8.3 with asyncua 1.1.5 and Python 3.12 with asyncua 2.0.1.
 
-```bash
-python -m pytest -c tests/pytest.ini
-```
+## Coverage
 
-Run only the system tests:
+The non-container tests cover:
 
-```bash
-python -m pytest -c tests/pytest.ini -m system
-```
+- Declarative status polling, scalar and list values, parameter writes, methods, partial signatures, lifecycle, and flat-interface validation through a real OPC
+  UA client.
+- Dashboard line injection, greeting and response framing, endpoint forwarding, and exact named command construction.
+- Local and caller-owned SFTP traversal, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
+- Command-line defaults, overrides, credentials, validation, and package-adapter delegation.
+- Flat per-program method naming, collision detection, load-before-play policy, controller methods, and status composition.
+- OPC UA application identity forwarding, composition-root wiring, signal handling, and clean managed-server shutdown.
+- Reproducible no-motion URP fixtures and system-test runner argument handling.
+- Module docstrings, parser help, namespace imports, documented public consumers, and dataclass-only production classes.
 
-The preferred one-command route is:
+Planned reliability tests include callback failure status mapping, port binding, polling failures, Dashboard timeouts, failed load responses, concurrent robot
+operations, and RTDE disconnect behavior.
+
+## System tests
+
+Run the prepared workflow on Python 3.10 or later:
 
 ```bash
 python tests/system/run.py
@@ -55,96 +65,43 @@ python tests/system/run.py
 
 The runner:
 
-- Finds Python 3.10 or later.
-- Keeps a reusable virtual environment and pytest cache in the operating-system user cache rather than the repository.
-- Installs the package and `system-test` dependencies from a temporary source copy.
-- Checks that Docker is running Linux `amd64` containers.
-- Pulls the exact URSim image pinned by the test harness.
-- Runs both local and SFTP catalogue paths.
+- Finds a supported interpreter.
+- Keeps its environment and pytest cache outside the repository.
+- Copies and installs both reusable packages and the gateway as separate distributions.
+- Checks for Linux `amd64` Docker.
+- Pulls the pinned URSim image unless `--no-pull` is used.
+- Builds the gateway with the repository root as Docker context.
+- Runs both local and SFTP catalogue arrangements.
 
-If the runner is started with an older Python and cannot find a newer interpreter automatically, provide one explicitly:
-
-```bash
-python tests/system/run.py --python "/path/to/python3.12"
-```
-
-Select one catalogue path:
+Select a catalogue or interpreter with:
 
 ```bash
 python tests/system/run.py --catalog local
 python tests/system/run.py --catalog sftp
+python tests/system/run.py --python "/path/to/python3.12"
 ```
 
-Install dependencies and verify test collection without Docker:
+Install and collect without Docker:
 
 ```bash
 python tests/system/run.py --collect-only
 ```
 
-Use `--skip-install` to reuse the prepared environment without asking pip to check dependencies, or `--no-pull` to let Testcontainers pull URSim when needed.
-Additional pytest arguments can be placed after `--`.
+For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, verifies the discovered program methods, observes a
+polled Dashboard state, starts `Main.urp`, pauses and stops it, starts `Production/PickPart.urp`, and confirms the loaded and playing state directly through
+URSim.
 
-## Architecture and unit coverage
-
-The non-container tests cover:
-
-- Local and SFTP command-line defaults, overrides, password sources, and required-value validation.
-- Local and recursive SFTP program discovery, URP filtering, relative paths, deterministic ordering, SSH setup, and invalid discovery configuration.
-- Dashboard command injection rejection, line-oriented socket exchanges, incomplete-response failures, endpoint binding, and exact protocol command mapping.
-- Application command registry construction, per-program shortcut binding, load-before-start sequencing, and catalogue return-type validation.
-- Gateway composition, executable entry-point wiring, signal handler installation, and clean server-context shutdown.
-- OPC UA method argument metadata, array return metadata, folder caching, namespace creation, endpoint configuration, and adapter wiring.
-- Deterministic, reproducible, readable no-motion URP fixture generation.
-- Reusable system-test runner interpreter validation, catalogue selection, collect-only mode, and pytest argument forwarding.
-- Architecture checks for required top-level docstrings, parser help messages, namespace imports, documented public consumers, and dataclass-only production
-  classes.
-
-The reliability and security cases listed in [planned features](features.md#planned-features) are intentionally deferred.
-
-## System tests
-
-The system suite uses real interfaces:
-
-- Official URSim e-Series configured as a UR20.
-- Deterministic PolyScope-compatible programs generated locally with a no-motion `Wait` node.
-- A disposable OpenSSH server with its SFTP subsystem.
-- The gateway Docker image built from `code/`.
-- A real `asyncua` OPC UA client.
-
-For each catalogue path, the client discovers the generated programs, loads `Main.urp`, starts it through the generic OPC UA `start()` method, and verifies that
-URSim reports `PLAYING`. It then pauses and stops the program, invokes the generated `Production/PickPart.urp/run()` shortcut, confirms that URSim loaded
-`PickPart.urp`, and again verifies the `PLAYING` state before stopping the robot.
-
-Two arrangements run the same OPC UA contract:
-
-```text
-Local catalogue:
-    Gateway shares the URSim network namespace.
-    Program files are mounted directly.
-    Dashboard host is 127.0.0.1.
-
-SFTP catalogue:
-    Gateway, URSim, and OpenSSH share a private Docker network.
-    Program discovery uses SFTP.
-    Program control uses URSim Dashboard Server.
-```
-
-Python 3.10 or later, Docker, and a Linux `amd64` environment are required. Install
-[Docker Desktop on Windows](https://docs.docker.com/desktop/setup/install/windows-install/) or [Docker Engine on Linux](https://docs.docker.com/engine/install/)
-and make sure its daemon is running before starting the suite. The pinned URSim image occupies approximately 3.2 GB once unpacked, and the first run also
-downloads Python packages and base images used to build the gateway and OpenSSH test containers. Later runs reuse normal pip and Docker caches.
-
-Python versions below 3.10 skip this suite at module collection time because the current container harness depends on `testcontainers` releases that no longer
-support those Python versions.
+The local arrangement mounts programs and shares the URSim network namespace. The SFTP arrangement uses a private Docker network containing the gateway, URSim,
+and OpenSSH. The same OPC UA contract must pass in both cases.
 
 ## Formatting
 
 ```bash
-python -m black --config code/pyproject.toml --check code/src tests
-python -m mdformat --check --wrap 160 README.md AGENTS.md docs tests/README.md
+python -m black --config code/pyproject.toml --check code/src packages tests
+python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/README.md packages/universal_robots_clients/README.md tests/README.md
 ```
 
 ## CI
 
-GitHub Actions runs architecture and unit tests and checks the installed command on Python 3.8.3 and 3.12. A Python 3.8.3 quality job checks Python formatting
-plus all maintained Markdown documentation, including `AGENTS.md` and `tests/README.md`, while a separate Python 3.12 job runs the Docker-backed system suite.
+GitHub Actions installs all three distributions separately. Unit jobs run package, architecture, and gateway tests on Python 3.8.3 and 3.12. A Python 3.8.3
+quality job checks all Python and Markdown sources, while a Python 3.12 system job runs the Docker-backed compatibility pipeline.

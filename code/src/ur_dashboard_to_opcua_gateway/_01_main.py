@@ -8,8 +8,8 @@ The public API is ``main()``, which is used by both the installed ``ur_dashboard
 ``_run_until_stopped()`` helper owns the server context manager, installs ``SIGINT`` and ``SIGTERM`` handlers, and waits on a threading event so the server is
 closed normally when the process is asked to stop.
 
-This module depends on the argument parser, the composition root, Python's signal and threading facilities, and the synchronous ``asyncua`` server API. It does
-not know how programs are discovered, robots are controlled, or OPC UA nodes are built.
+This module depends on the argument parser, the composition root, and Python's signal and threading facilities. The composed server's context-manager contract
+keeps both ``asyncua`` and package-owned polling details out of the process entry point.
 """
 
 import signal
@@ -17,15 +17,13 @@ import threading
 import types
 import typing
 
-import asyncua.sync
-
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
 
 __all__ = ["main"]
 
 
-def _run_until_stopped(server: asyncua.sync.Server) -> None:
+def _run_until_stopped(server: typing.Any) -> None:
     """Run the composed server until the process receives a stop signal."""
     stopped = threading.Event()
 

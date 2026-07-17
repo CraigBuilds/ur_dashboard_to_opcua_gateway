@@ -1,36 +1,88 @@
 # Architecture
 
-## Source reading order
+## Overview
 
-The production modules are named for the activity they perform. Reading them in numeric order follows the gateway from process entry through configuration,
-composition, program discovery, robot control, command combination, and OPC UA exposure.
+The repository now contains three independently installable Python distributions:
+
+```text
+ur_dashboard_to_opcua_gateway
+    +-- declarative-opcua-server
+    |       +-- asyncua
+    +-- universal-robots-clients
+            +-- Python standard library
+            +-- paramiko [optional SFTP extra]
+```
+
+The package projects do not depend on one another. The gateway is the only layer that combines robot clients with OPC UA.
+
+## Gateway reading order
 
 ```text
 _01_main.py
     Parse configuration, compose the gateway, and own process startup and shutdown.
 
 _02_parse_command_line_args.py
-    Parse and validate command-line and environment configuration into Args.
+    Resolve command-line, environment, default, and validation rules into Args.
 
 _03_compose_gateway.py
-    Assemble the configured dependencies and return the OPC UA server.
+    Bind concrete discovery and Dashboard functions and return the configured server.
 
 _04_discover_ur_programs.py
-    Discover UR programs from a local directory or SFTP.
+    Select local or SFTP package discovery from Args.
 
 _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde.py
-    Control UR programs through Dashboard and provide the boundary for future RTDE parameter exchange.
+    Bind reusable Dashboard operations and reserve the application boundary for RTDE.
 
 _06_combine_program_discovery_and_control.py
-    Combine program discovery and Dashboard control into application commands.
+    Create flat status, parameter, and method interfaces from configured functions.
 
 _07_expose_program_commands_via_opcua.py
-    Expose the application commands through an OPC UA address space.
+    Apply the gateway namespace, endpoint, and UR20 root to the declarative server.
 ```
 
-The numeric prefixes are part of the module names and keep the intended reading order visible in an alphabetical file listing.
+The numeric prefixes keep the intended reading order visible in an alphabetical listing.
 
-## Dependencies
+## Package responsibilities
+
+### declarative-opcua-server
+
+The package exposes only `declarative_opcua_server.create_server()`. It receives three flat mappings:
+
+```python
+server = declarative_opcua_server.create_server(
+    status_interface={"ToolVoltage": read_tool_voltage},
+    parameter_interface={"TargetHeight": write_target_height},
+    method_interface={"StartRoutine": start_routine},
+)
+```
+
+Its fixed address space is:
+
+```text
+Application/
+    Status/       typed zero-argument getters, polled and read-only
+    Parameters/   typed one-argument setters, writable by clients
+    Methods/      zero-argument, no-result commands
+```
+
+Function annotations map `bool`, `int`, `float`, `str`, `bytes`, and homogeneous `typing.List` values to OPC UA types. The package validates every interface
+before allocating an asyncua server, adapts method callbacks, intercepts parameter writes, publishes changed status values, and owns polling shutdown. It does
+not know about robots, nested application schemas, or process signals.
+
+### universal-robots-clients
+
+The root package re-exports nothing. Consumers retain protocol context in every call:
+
+```python
+import universal_robots_clients.dashboard as dashboard
+import universal_robots_clients.program_discovery as program_discovery
+```
+
+`dashboard` owns TCP framing, validation, and named Dashboard operations. `program_discovery` owns local and caller-owned SFTP traversal plus an optional
+Paramiko connection convenience function. The modules do not import one another. A real `rtde` module will be added only after its dependency, connection
+lifecycle, and register contract are proven.
+
+## Gateway dependencies
 
 ```text
 _01_main
@@ -46,53 +98,44 @@ _03_compose_gateway
 
 _04_discover_ur_programs
     +-- _02_parse_command_line_args
+    +-- universal_robots_clients.program_discovery
 
 _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
     +-- _02_parse_command_line_args
+    +-- universal_robots_clients.dashboard
 
 _06_combine_program_discovery_and_control
-    +-- _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
+    +-- Python standard library only
 
 _07_expose_program_commands_via_opcua
     +-- _06_combine_program_discovery_and_control
+    +-- declarative_opcua_server
 ```
 
-The graph is acyclic. `_02_parse_command_line_args` does not import later application modules, while `_03_compose_gateway` is the composition root and is the
-only module that imports every concrete component.
+The graph is acyclic. The extracted packages accept ordinary values and callables rather than importing the gateway's `Args` or interface dataclass.
 
-External dependencies remain at the relevant adapter or process boundary:
+## Runtime flow
 
 ```text
-_01_main
-    asyncua.sync, signal, threading
-
-_02_parse_command_line_args
-    Python standard library only
-
-_03_compose_gateway
-    asyncua.sync, functools
-
-_04_discover_ur_programs
-    pathlib and stat for all catalogues
-    paramiko only when SFTP discovery is selected
-
-_05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
-    socket and functools
-
-_06_combine_program_discovery_and_control
-    Python standard library only
-
-_07_expose_program_commands_via_opcua
-    asyncua
+_01_main.main()
+    -> _02_parse_command_line_args.parse_args()
+    -> _03_compose_gateway.compose_gateway()
+        -> partial(_04_discover_ur_programs.discover_programs, args)
+        -> _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde.create_dashboard_commands(args)
+        -> _06_combine_program_discovery_and_control.create_interfaces(...)
+        -> _07_expose_program_commands_via_opcua.create_server(...)
+            -> declarative_opcua_server.create_server(...)
+    -> _01_main._run_until_stopped(server)
 ```
 
-Paramiko's type-checking import does not execute at runtime, and the operational imports remain inside the SFTP functions. Local-only installations therefore do
-not require Paramiko.
+Discovery runs during composition. Module 6 uses a comprehension to create a flat `StartProgram_...` method for each program, then adds `PauseProgram` and
+`StopProgram`. `ProgramState` currently uses the reusable Dashboard getter; the declarative server polls it and publishes changes. The parameter interface is
+empty until RTDE is implemented.
 
-## Public module APIs
+The main module enters the managed server context and waits for `SIGINT` or `SIGTERM`. The declarative package starts its asyncua server and polling thread on
+entry and stops both on exit.
 
-Each module declares its cross-module API in `__all__`. Functions, constants, and type aliases that begin with an underscore are module-internal implementation
-details. Public function and dataclass docstrings identify the modules that use them.
+## Public gateway APIs
 
 ```text
 _01_main
@@ -112,78 +155,37 @@ _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde
     DashboardCommand
     DashboardCommands
     create_dashboard_commands
-    send_command
 
 _06_combine_program_discovery_and_control
-    Command
-    CommandRegistry
-    CommandResult
-    create_command_registry
+    GatewayInterfaces
+    create_interfaces
 
 _07_expose_program_commands_via_opcua
     OPC_NAMESPACE
     create_server
 ```
 
-`Args` and `CommandRegistry` are the only classes declared in production code, and both are frozen dataclasses containing data rather than behaviour. Program
-discovery is exposed as one function that accepts `Args`. The composition root binds those arguments into the zero-argument function required by the command
-registry. Dashboard control is represented by configured functions in a `DashboardCommands` dictionary. `create_command_registry()` is the only public
-construction function in `_06_combine_program_discovery_and_control`; it creates both the generic command mapping and the bound per-program operations held by
-`CommandRegistry`. Local discovery, SFTP discovery, Dashboard protocol exchange, per-program operation construction, OPC UA argument conversion, folder
-creation, and callback adaptation remain internal functions.
-
-The container-backed test harness still uses classes where object identity and resource lifecycles are useful.
-
-Cross-module calls retain their module namespace:
-
-```python
-import functools
-
-import ur_dashboard_to_opcua_gateway._04_discover_ur_programs as discover_ur_programs
-import ur_dashboard_to_opcua_gateway._05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde as control_ur_programs_and_exchange_parameters
-
-discover_programs_function = functools.partial(discover_ur_programs.discover_programs, args)
-dashboard_commands = control_ur_programs_and_exchange_parameters.create_dashboard_commands(args)
-```
-
-`tests/architecture/test_repository_conventions.py` enforces module docstrings, parser help messages, namespace imports, consumer documentation for public
-callables, and the rule that production classes are reserved for dataclasses.
-
-## Runtime flow
-
-```text
-_01_main.main()
-    -> _02_parse_command_line_args.parse_args()
-    -> _03_compose_gateway.compose_gateway()
-    -> _01_main._run_until_stopped()
-
-_03_compose_gateway.compose_gateway()
-    -> functools.partial(_04_discover_ur_programs.discover_programs, args)
-    -> _05_control_ur_programs_and_exchange_parameters_via_dashboard_and_rtde.create_dashboard_commands()
-    -> _06_combine_program_discovery_and_control.create_command_registry()
-    -> _07_expose_program_commands_via_opcua.create_server()
-```
-
-`_03_compose_gateway` constructs and returns the server without starting it. `_01_main` owns `SIGINT` and `SIGTERM`, starts the server through its context
-manager, waits for a stop request, and lets the context manager close the server.
-
-The composition root configures program discovery with `functools.partial`, while the Dashboard factory returns configured functions rather than state-holder
-objects. Program discovery runs inside `create_command_registry()` during composition to generate per-program operations and runs again whenever a client calls
-the generic `programs()` command. The complete application command model remains independent of OPC UA, so other transports can be added without changing
-discovery or Dashboard control.
+`Args` and `GatewayInterfaces` are frozen data classes. The declarative package uses private dataclasses for managed lifecycle and polling records. Public
+functions document their consumers, and cross-module calls retain module namespaces.
 
 ## Repository layout
 
 ```text
-.gitattributes
-.github/workflows/ci.yml
-.gitignore
-AGENTS.md
-README.md
 code/
     Dockerfile
     pyproject.toml
     src/ur_dashboard_to_opcua_gateway/
+packages/
+    declarative_opcua_server/
+        pyproject.toml
+        README.md
+        src/declarative_opcua_server/
+        tests/
+    universal_robots_clients/
+        pyproject.toml
+        README.md
+        src/universal_robots_clients/
+        tests/
 docs/
 tests/
     architecture/
@@ -192,15 +194,11 @@ tests/
     support/
 ```
 
-`AGENTS.md` stores durable repository guidance for Codex, including the required Git workflow. `code/pyproject.toml` is the single source of package and
-dependency metadata. The test folders separate static architecture checks, isolated unit tests, Docker-backed system tests, and shared support code. Generated
-caches, egg metadata, and built distributions are intentionally absent.
+Package-local tests move with reusable behavior. Gateway tests retain application policy and the Docker-backed compatibility contract across all three
+distributions.
 
 ## Python compatibility
 
-The package supports Python 3.8.3 and later. Runtime annotations use `typing` forms that are evaluated correctly on Python 3.8, and the namespace-import tests
-avoid syntax and standard-library helpers introduced in later Python releases.
-
-Dependency markers select `asyncua` 1.1.5 on Python 3.8 and 3.9 and `asyncua` 2.0.1 on Python 3.10 and later. CI runs unit tests on Python 3.8.3 and 3.12,
-formatting on Python 3.8.3, and Docker-backed system tests on Python 3.12. The local system-test runner accepts Python 3.10 or later because its current
-`testcontainers` dependency does not support older versions. The deployment Docker image also remains on Python 3.12.
+All distributions support Python 3.8.3 and later. Runtime annotations use Python 3.8-compatible `typing` forms. `declarative-opcua-server` selects asyncua 1.1.5
+for Python below 3.10 and asyncua 2.0.1 for newer interpreters. CI runs non-container tests on Python 3.8.3 and 3.12 and runs the real container pipeline on
+Python 3.12.

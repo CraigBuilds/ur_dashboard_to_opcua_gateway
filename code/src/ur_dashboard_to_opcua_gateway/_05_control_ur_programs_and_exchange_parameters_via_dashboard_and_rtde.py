@@ -1,129 +1,66 @@
-"""Control UR programs through Dashboard and prepare for parameter exchange through RTDE.
+"""Bind reusable robot clients into gateway-ready control and data functions.
 
-This module is the gateway's robot-facing control and data-exchange boundary. Its implemented MVP API uses the Dashboard Server for program lifecycle operations:
-loading, starting, pausing, stopping, and querying a program. Each invocation validates that the command cannot inject another protocol line, opens a connection,
-reads the server greeting, sends one newline-terminated command, reads one response, and closes the connection. Responses remain stripped text rather than being
-interpreted as typed success or failure values.
+This application adapter currently binds the configured Dashboard host and port to the reusable operations in ``universal_robots_clients.dashboard``. The
+resulting flat function mapping has one argument-taking loader plus zero-argument play, pause, stop, and state functions, making it straightforward for the next
+module to create gateway methods and status getters without carrying connection configuration further through the application.
 
-RTDE parameter exchange is deliberately named as the second responsibility of this boundary, but it is not implemented yet. The register contract, invocation
-handshake, supported value types, persistent connection ownership, and robot-side acknowledgement rules must be proven together before a public RTDE API is added.
-Keeping that work in this module initially will let the gateway prototype Dashboard-plus-RTDE behaviour before the two protocol implementations are separated
-into modules of the proposed ``universal_robots_clients`` package.
+RTDE parameter exchange remains deliberately absent until a real client and robot-side register contract have been selected and tested. When that work lands,
+this module will bind reusable ``universal_robots_clients.rtde`` operations into status getters and parameter setters without moving invocation policy into the
+client package. The OPC UA package already accepts those callable shapes.
 
-The public API includes the ``DashboardCommand`` and ``DashboardCommands`` callable types, low-level ``send_command()``, and
-``create_dashboard_commands(args)``. The factory binds the configured host, port, and timeout into a dictionary whose function signatures are suitable for the
-application registry and OPC UA method generation. Command-specific formatting and socket exchange helpers remain internal.
-
-This module currently depends on ``Args`` from ``_02_parse_command_line_args`` and Python's ``socket`` and ``functools`` modules. It does not depend on discovery,
-command combination, or OPC UA. A future RTDE implementation may add an optional third-party protocol dependency while keeping invocation policy in the gateway's
-combination layer.
+The public API is ``create_dashboard_commands()`` and its two callable mapping aliases. This module depends on ``Args`` and
+``universal_robots_clients.dashboard``. It does not implement sockets, OPC UA nodes, program discovery, or cross-protocol workflow policy.
 """
 
 import functools
-import socket
 import typing
+
+import universal_robots_clients.dashboard as dashboard
 
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 
 DashboardCommand = typing.Callable[..., str]
 DashboardCommands = typing.Dict[str, DashboardCommand]
 
-__all__ = ["DashboardCommand", "DashboardCommands", "create_dashboard_commands", "send_command"]
+__all__ = ["DashboardCommand", "DashboardCommands", "create_dashboard_commands"]
 
 _DASHBOARD_TIMEOUT = 5.0
-_TEXT_ENCODING = "utf-8"
 
 
-def _exchange(stream: typing.BinaryIO, command: str) -> bytes:
-    """Exchange one Dashboard command."""
-    greeting = stream.readline()
-
-    if not greeting:
-        message = "No greeting received."
-        raise ConnectionError(message)
-
-    line = f"{command}\n"
-    data = line.encode(_TEXT_ENCODING)
-    stream.write(data)
-    stream.flush()
-
-    response = stream.readline()
-
-    if not response:
-        message = "No response received."
-        raise ConnectionError(message)
-
-    return response
+def _load_program(args: parse_command_line_args.Args, program: str) -> str:
+    """Load one program through the configured Dashboard endpoint."""
+    return dashboard.load_program(args.dashboard_host, program, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
 
-def _validate_command(command: str) -> None:
-    """Reject commands with line breaks."""
-    has_newline = "\n" in command
-    has_return = "\r" in command
-
-    if has_newline or has_return:
-        message = "Command cannot contain line breaks."
-        raise ValueError(message)
+def _play_program(args: parse_command_line_args.Args) -> str:
+    """Play the configured robot's loaded program."""
+    return dashboard.play_program(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
 
-def send_command(host: str, port: int, command: str, timeout: float = _DASHBOARD_TIMEOUT) -> str:
-    """Send one command to a UR Dashboard Server.
-
-    Used by command functions in this module and ``tests.system.containers.ursim_container``.
-    """
-    _validate_command(command)
-    address = (host, port)
-    connection = socket.create_connection(address, timeout)
-
-    with connection:
-        stream = connection.makefile("rwb")
-
-        with stream:
-            response = _exchange(stream, command)
-
-    text = response.decode(_TEXT_ENCODING, errors="replace")
-
-    return text.strip()
+def _pause_program(args: parse_command_line_args.Args) -> str:
+    """Pause the configured robot's active program."""
+    return dashboard.pause_program(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
 
-def _load_program(host: str, port: int, timeout: float, program: str) -> str:
-    """Load one robot program."""
-    command = f"load {program}"
-
-    return send_command(host, port, command, timeout)
+def _stop_program(args: parse_command_line_args.Args) -> str:
+    """Stop the configured robot's active program."""
+    return dashboard.stop_program(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
 
-def _play_program(host: str, port: int, timeout: float) -> str:
-    """Start the loaded program."""
-    return send_command(host, port, "play", timeout)
-
-
-def _pause_program(host: str, port: int, timeout: float) -> str:
-    """Pause the running program."""
-    return send_command(host, port, "pause", timeout)
-
-
-def _stop_program(host: str, port: int, timeout: float) -> str:
-    """Stop the active program."""
-    return send_command(host, port, "stop", timeout)
-
-
-def _get_program_state(host: str, port: int, timeout: float) -> str:
-    """Return the active program state."""
-    return send_command(host, port, "programState", timeout)
+def _get_program_state(args: parse_command_line_args.Args) -> str:
+    """Read the configured robot's program state."""
+    return dashboard.get_program_state(args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
 
 
 def create_dashboard_commands(args: parse_command_line_args.Args) -> DashboardCommands:
-    """Create configured functions that control UR programs through Dashboard.
+    """Create configured Dashboard functions for gateway composition.
 
     Used by ``_03_compose_gateway.compose_gateway()``.
     """
-    endpoint = (args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)
-
     return {
-        "load": functools.partial(_load_program, *endpoint),
-        "start": functools.partial(_play_program, *endpoint),
-        "pause": functools.partial(_pause_program, *endpoint),
-        "stop": functools.partial(_stop_program, *endpoint),
-        "status": functools.partial(_get_program_state, *endpoint),
+        "load_program": functools.partial(_load_program, args),
+        "play_program": functools.partial(_play_program, args),
+        "pause_program": functools.partial(_pause_program, args),
+        "stop_program": functools.partial(_stop_program, args),
+        "get_program_state": functools.partial(_get_program_state, args),
     }

@@ -118,19 +118,19 @@ _06_combine_program_discovery_and_control
     Command
     CommandRegistry
     CommandResult
-    ProgramShortcuts
     create_command_registry
-    create_program_shortcuts
 
 _07_expose_program_commands_via_opcua
     OPC_NAMESPACE
     create_server
 ```
 
-`Args` is the only class declared in production code, and it is an immutable dataclass. Program discovery is exposed as one function that accepts `Args`. The
-composition root binds those arguments into the zero-argument function required by the command registry. Dashboard control is represented by configured
-functions in a `DashboardCommands` dictionary. Local discovery, SFTP discovery, Dashboard protocol exchange, OPC UA argument conversion, folder creation, and
-callback adaptation remain internal functions.
+`Args` and `CommandRegistry` are the only classes declared in production code, and both are frozen dataclasses containing data rather than behaviour. Program
+discovery is exposed as one function that accepts `Args`. The composition root binds those arguments into the zero-argument function required by the command
+registry. Dashboard control is represented by configured functions in a `DashboardCommands` dictionary. `create_command_registry()` is the only public
+construction function in `_06_combine_program_discovery_and_control`; it creates both the generic command mapping and the bound per-program operations held by
+`CommandRegistry`. Local discovery, SFTP discovery, Dashboard protocol exchange, per-program operation construction, OPC UA argument conversion, folder
+creation, and callback adaptation remain internal functions.
 
 The container-backed test harness still uses classes where object identity and resource lifecycles are useful.
 
@@ -161,7 +161,6 @@ _03_compose_gateway.compose_gateway()
     -> functools.partial(_04_discover_ur_programs.discover_programs, args)
     -> _05_control_ur_programs_via_dashboard.create_dashboard_commands()
     -> _06_combine_program_discovery_and_control.create_command_registry()
-    -> _06_combine_program_discovery_and_control.create_program_shortcuts()
     -> _07_expose_program_commands_via_opcua.create_server()
 ```
 
@@ -169,8 +168,9 @@ _03_compose_gateway.compose_gateway()
 manager, waits for a stop request, and lets the context manager close the server.
 
 The composition root configures program discovery with `functools.partial`, while the Dashboard factory returns configured functions rather than state-holder
-objects. Program discovery runs during composition to generate shortcuts and runs again whenever a client calls the generic `programs()` command. The combined
-application commands remain independent of OPC UA, so other transports can be added without changing discovery or Dashboard control.
+objects. Program discovery runs inside `create_command_registry()` during composition to generate per-program operations and runs again whenever a client calls
+the generic `programs()` command. The complete application command model remains independent of OPC UA, so other transports can be added without changing
+discovery or Dashboard control.
 
 ## Repository layout
 

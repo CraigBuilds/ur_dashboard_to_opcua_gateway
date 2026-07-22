@@ -52,10 +52,6 @@ skip-magic-trailing-comma = true
 python_version = "3.8"
 files = [
     "code/src",
-    "packages/declarative_opcua_server/src",
-    "packages/declarative_opcua_server/tests",
-    "packages/universal_robots_clients/src",
-    "packages/universal_robots_clients/tests",
     "tests",
 ]
 check_untyped_defs = true

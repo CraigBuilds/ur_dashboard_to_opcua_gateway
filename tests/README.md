@@ -33,13 +33,13 @@ tests/
         containers/  Disposable service wrappers
         docker/      OpenSSH test image
     support/         Shared deterministic fixtures and waiting helpers
-    pytest.ini       Package and gateway discovery paths and markers
+pytest.ini           Gateway test discovery paths and markers
 ```
 
 Run everything except Docker:
 
 ```bash
-python -m pytest -c tests/pytest.ini -m "not system"
+python -m pytest -m "not system"
 ```
 
 Run the prepared real pipeline:

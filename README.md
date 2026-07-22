@@ -193,7 +193,7 @@ the container.
 Run both package projects and the gateway without Docker:
 
 ```bash
-python -m pytest -c tests/pytest.ini -m "not system"
+python -m pytest -m "not system"
 ```
 
 Run the complete reusable URSim pipeline on Python 3.10 or later:

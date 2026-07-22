@@ -27,15 +27,13 @@ python -m pip install -e "./code[sftp,test,format,type-check]"
 Run every non-container test:
 
 ```bash
-python -m pytest -c tests/pytest.ini -m "not system"
+python -m pytest -m "not system"
 ```
 
-Focused package and gateway commands are:
+The gateway's focused command is:
 
 ```bash
-python -m pytest -c tests/pytest.ini packages/declarative_opcua_server/tests
-python -m pytest -c tests/pytest.ini packages/universal_robots_clients/tests
-python -m pytest -c tests/pytest.ini tests/architecture tests/unit
+python -m pytest tests/architecture tests/unit
 ```
 
 The non-container suite supports Python 3.8.3 and later. CI runs it on Python 3.8.3 against the compatible asyncua 1.x line and Python 3.12 against the

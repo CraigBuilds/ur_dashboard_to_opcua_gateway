@@ -11,6 +11,12 @@ import typing
 
 _MINIMUM_PYTHON = (3, 10)
 _PROJECT_CACHE_NAME = "ur_dashboard_to_opcua_gateway"
+_DECLARATIVE_SERVER_REQUIREMENT = (
+    "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/1f4cd1ccb37937cff690ea51fca860c9293b7ac8.zip"
+)
+_ROBOT_CLIENTS_REQUIREMENT = (
+    "universal-robots-clients[sftp,rtde] @ " "https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -182,11 +188,8 @@ def _install_dependencies(python: pathlib.Path, repository: pathlib.Path) -> Non
 
     with tempfile.TemporaryDirectory(prefix="ur_dashboard_to_opcua_gateway_system_tests_") as temporary:
         destination = pathlib.Path(temporary)
-        opcua_package = _copy_project_for_install(repository / "packages" / "declarative_opcua_server", destination)
-        robot_clients_package = _copy_project_for_install(repository / "packages" / "universal_robots_clients", destination)
         gateway_package = _copy_project_for_install(repository / "code", destination)
-        _run([str(python), "-m", "pip", "install", str(opcua_package)], repository)
-        _run([str(python), "-m", "pip", "install", f"{robot_clients_package}[sftp,rtde]"], repository)
+        _run([str(python), "-m", "pip", "install", _DECLARATIVE_SERVER_REQUIREMENT, _ROBOT_CLIENTS_REQUIREMENT], repository)
         _run([str(python), "-m", "pip", "install", f"{gateway_package}[system-test]"], repository)
 
 
@@ -241,7 +244,7 @@ def _run_tests(
 ) -> None:
     """Run or collect the real system tests."""
     cache.mkdir(parents=True, exist_ok=True)
-    command = [str(python), "-m", "pytest", "-c", "tests/pytest.ini", "-o", f"cache_dir={cache}", "-m", "system"]
+    command = [str(python), "-m", "pytest", "-c", "pytest.ini", "-o", f"cache_dir={cache}", "-m", "system", "tests/system"]
 
     if catalog != "all":
         command.extend(["-k", catalog])

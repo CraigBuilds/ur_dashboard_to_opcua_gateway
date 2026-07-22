@@ -5,17 +5,8 @@ import pathlib
 import typing
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-PRODUCTION_ROOTS = (
-    PROJECT_ROOT / "code" / "src" / "ur_dashboard_to_opcua_gateway",
-    PROJECT_ROOT / "packages" / "declarative_opcua_server" / "src" / "declarative_opcua_server",
-    PROJECT_ROOT / "packages" / "universal_robots_clients" / "src" / "universal_robots_clients",
-)
-PYTHON_ROOTS = (
-    *PRODUCTION_ROOTS,
-    PROJECT_ROOT / "packages" / "declarative_opcua_server" / "tests",
-    PROJECT_ROOT / "packages" / "universal_robots_clients" / "tests",
-    PROJECT_ROOT / "tests",
-)
+PRODUCTION_ROOTS = (PROJECT_ROOT / "code" / "src" / "ur_dashboard_to_opcua_gateway",)
+PYTHON_ROOTS = (*PRODUCTION_ROOTS, PROJECT_ROOT / "tests")
 
 
 def python_files() -> typing.List[pathlib.Path]:

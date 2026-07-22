@@ -14,6 +14,7 @@ import ur_dashboard_to_opcua_gateway.args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway.gateway as compose_gateway
 
 import tests.support.program_fixture as program_fixture
+import tests.system.docker_engine as docker_engine
 import tests.system.run as run_system_tests
 
 
@@ -399,3 +400,65 @@ def test_system_test_command_forwards_selection_and_pytest_args(monkeypatch: pyt
     assert cwd == tmp_path
     assert environment is not None
     assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
+def test_docker_engine_inspects_daemon_and_closes_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Read structured daemon information through one closed Docker SDK client."""
+    client = unittest.mock.MagicMock()
+    client.info.return_value = {"OSType": "linux", "Architecture": "amd64"}
+    sdk = types.SimpleNamespace(from_env=unittest.mock.MagicMock(return_value=client), errors=types.SimpleNamespace(DockerException=RuntimeError))
+    monkeypatch.setattr(docker_engine, "_docker_sdk", lambda: sdk)
+
+    assert docker_engine.inspect_platform() == "linux/amd64"
+    sdk.from_env.assert_called_once_with()
+    client.info.assert_called_once_with()
+    client.close.assert_called_once_with()
+
+
+def test_docker_engine_pulls_image_and_closes_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pull through the high-level image collection and release the Docker client."""
+    client = unittest.mock.MagicMock()
+    sdk = types.SimpleNamespace(from_env=unittest.mock.MagicMock(return_value=client), errors=types.SimpleNamespace(DockerException=RuntimeError))
+    monkeypatch.setattr(docker_engine, "_docker_sdk", lambda: sdk)
+
+    docker_engine.pull_image("example.test/ursim:1.2.3")
+
+    client.images.pull.assert_called_once_with("example.test/ursim:1.2.3")
+    client.close.assert_called_once_with()
+
+
+def test_system_test_runner_validates_docker_with_prepared_python(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """Use the Docker SDK installed in the reusable system-test environment."""
+    captured: typing.List[typing.Tuple[typing.Sequence[str], pathlib.Path, typing.Optional[typing.Dict[str, str]]]] = []
+
+    def capture(command: typing.Sequence[str], cwd: pathlib.Path, environment: typing.Optional[typing.Dict[str, str]] = None) -> str:
+        """Capture one Docker helper command."""
+        captured.append((command, cwd, environment))
+
+        return "linux/amd64"
+
+    monkeypatch.setattr(run_system_tests, "_capture", capture)
+    python = tmp_path / "python.exe"
+    environment = {"DOCKER_HOST": "tcp://docker.example:2376"}
+
+    run_system_tests._require_docker(python, tmp_path, environment)
+
+    assert captured == [([str(python), "-m", "tests.system.docker_engine", "info"], tmp_path, environment)]
+
+
+def test_system_test_runner_pulls_with_prepared_python(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """Pull the pinned URSim image without requiring a Docker CLI executable."""
+    captured: typing.List[typing.Tuple[typing.Sequence[str], pathlib.Path, typing.Optional[typing.Dict[str, str]]]] = []
+
+    def run(command: typing.Sequence[str], cwd: pathlib.Path, environment: typing.Optional[typing.Dict[str, str]] = None) -> None:
+        """Capture one Docker helper command."""
+        captured.append((command, cwd, environment))
+
+    monkeypatch.setattr(run_system_tests, "_ursim_image", lambda python, repository, environment: "universalrobots/ursim_e-series:5.25.2")
+    monkeypatch.setattr(run_system_tests, "_run", run)
+    python = tmp_path / "python.exe"
+    environment = {"PYTHONDONTWRITEBYTECODE": "1"}
+
+    run_system_tests._pull_ursim_image(python, tmp_path, environment)
+
+    assert captured == [([str(python), "-m", "tests.system.docker_engine", "pull", "universalrobots/ursim_e-series:5.25.2"], tmp_path, environment)]

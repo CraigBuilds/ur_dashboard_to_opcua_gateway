@@ -73,9 +73,9 @@ The runner:
 
 - Finds a supported interpreter.
 - Keeps its environment and pytest cache outside the repository.
-- Installs pinned commits of both reusable packages and a copied gateway distribution.
-- Checks for Linux `amd64` Docker.
-- Pulls the pinned URSim image unless `--no-pull` is used.
+- Installs pinned releases of both reusable packages and a copied gateway distribution.
+- Checks for a Linux `amd64` Docker daemon through the Docker SDK for Python.
+- Pulls the pinned URSim image through the SDK unless `--no-pull` is used.
 - Builds the gateway with the repository root as Docker context.
 - Runs both local and SFTP catalogue arrangements.
 
@@ -92,6 +92,9 @@ Install and collect without Docker:
 ```bash
 python tests/system/run.py --collect-only
 ```
+
+Docker Desktop or Docker Engine must be running for an execution run. The runner uses `docker.from_env()`, so standard Docker environment configuration such as
+`DOCKER_HOST`, `DOCKER_TLS_VERIFY`, and `DOCKER_CERT_PATH` is respected; the Docker command-line executable itself is not required.
 
 For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, checks every basic RTDE status type, changes the
 speed slider and a tool output, lists programs, adds a URP, refreshes and invokes its new generated method, removes it and refreshes again, loads and runs a
@@ -117,8 +120,8 @@ MyPy checks gateway production, architecture, unit, support, and system-test mod
 python -m mypy --config-file code/pyproject.toml
 ```
 
-The configuration treats untyped `asyncua` and `testcontainers` APIs as explicit external boundaries. Paramiko is checked through its version-matched
-`types-paramiko` stubs. Application and package modules do not use blanket MyPy error suppressions.
+The configuration treats untyped `asyncua`, Docker SDK, and `testcontainers` APIs as explicit external boundaries. Paramiko is checked through its
+version-matched `types-paramiko` stubs. Application and package modules do not use blanket MyPy error suppressions.
 
 ## CI
 

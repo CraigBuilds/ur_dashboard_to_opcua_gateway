@@ -23,10 +23,7 @@ def _is_urp(path: pathlib.PurePath) -> bool:
 
 
 def discover_programs(root: typing.Union[str, pathlib.Path, pathlib.PurePosixPath]) -> typing.List[str]:
-    """Return all URP paths beneath one local root.
-
-    Used by ``urp_discovery_client`` and applications with direct filesystem access.
-    """
+    """Return all URP paths beneath one local root"""
     folder = pathlib.Path(root)
     paths = folder.rglob("*")
     programs = (path.relative_to(folder) for path in paths if path.is_file() and _is_urp(path))

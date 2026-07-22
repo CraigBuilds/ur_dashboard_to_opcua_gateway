@@ -30,10 +30,7 @@ def discover_programs(
     timeout: float = urp_discovery_sftp_client.DEFAULT_TIMEOUT,
     trust_unknown_host_keys: bool = False,
 ) -> typing.List[str]:
-    """Discover URP files through the selected backend.
-
-    Used by applications that select discovery from configuration, including ``ur_dashboard_to_opcua_gateway``.
-    """
+    """Discover URP files through the selected backend"""
     if backend == "local":
         return urp_discovery_local_client.discover_programs(root)
 

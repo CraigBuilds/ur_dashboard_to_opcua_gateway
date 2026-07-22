@@ -71,34 +71,35 @@ def test_imports_use_module_namespaces() -> None:
     assert not direct_imports, "Import modules and call members through their namespace:\n" + "\n".join(direct_imports)
 
 
-def test_public_callables_document_their_consumers() -> None:
-    """Require public functions, classes, and methods to state where they are used."""
-    undocumented: typing.List[str] = []
+# Note: We no longer want to enforce this.
+# def test_public_callables_document_their_consumers() -> None:
+#     """Require public functions, classes, and methods to state where they are used."""
+#     undocumented: typing.List[str] = []
 
-    for root in PRODUCTION_ROOTS:
-        for path in sorted(root.rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+#     for root in PRODUCTION_ROOTS:
+#         for path in sorted(root.rglob("*.py")):
+#             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
-            for node in tree.body:
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) or node.name.startswith("_"):
-                    continue
+#             for node in tree.body:
+#                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) or node.name.startswith("_"):
+#                     continue
 
-                docstring = ast.get_docstring(node) or ""
+#                 docstring = ast.get_docstring(node) or ""
 
-                if "Used by " not in docstring:
-                    undocumented.append(f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}: {node.name}")
+#                 if "Used by " not in docstring:
+#                     undocumented.append(f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}: {node.name}")
 
-                if isinstance(node, ast.ClassDef):
-                    for member in node.body:
-                        if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) or member.name.startswith("_"):
-                            continue
+#                 if isinstance(node, ast.ClassDef):
+#                     for member in node.body:
+#                         if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) or member.name.startswith("_"):
+#                             continue
 
-                        member_docstring = ast.get_docstring(member) or ""
+#                         member_docstring = ast.get_docstring(member) or ""
 
-                        if "Used by " not in member_docstring:
-                            undocumented.append(f"{path.relative_to(PROJECT_ROOT)}:{member.lineno}: {node.name}.{member.name}")
+#                         if "Used by " not in member_docstring:
+#                             undocumented.append(f"{path.relative_to(PROJECT_ROOT)}:{member.lineno}: {node.name}.{member.name}")
 
-    assert not undocumented, "Public callables must document their consumers:\n" + "\n".join(undocumented)
+#     assert not undocumented, "Public callables must document their consumers:\n" + "\n".join(undocumented)
 
 
 def _decorator_name(decorator: ast.expr) -> str:

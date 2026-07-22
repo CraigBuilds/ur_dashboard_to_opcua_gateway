@@ -31,10 +31,7 @@ _PASSWORD_VARIABLE = "UR_ROBOT_PASSWORD"
 
 @dataclasses.dataclass(frozen=True)
 class Args:
-    """Resolved gateway configuration.
-
-    Used by ``_01_main`` and ``_03_compose_gateway``.
-    """
+    """Resolved gateway configuration"""
 
     catalog: str
     programs_folder: str = _DEFAULT_PROGRAMS_FOLDER
@@ -98,10 +95,7 @@ def _dashboard_host(parsed: argparse.Namespace) -> str:
 
 
 def parse_args(arguments: typing.Optional[typing.Sequence[str]] = None) -> Args:
-    """Parse command-line arguments into resolved configuration.
-
-    Used by ``_01_main.main()``.
-    """
+    """Parse command-line arguments into resolved configuration."""
     parser = _create_parser()
     parsed = parser.parse_args(arguments)
 

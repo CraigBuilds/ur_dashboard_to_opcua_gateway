@@ -41,10 +41,7 @@ def _walk_programs(sftp: typing.Any, root: pathlib.PurePosixPath, folder: pathli
 
 
 def discover_programs(sftp: typing.Any, root: typing.Union[str, pathlib.Path, pathlib.PurePosixPath]) -> typing.List[str]:
-    """Return all URP paths through a caller-owned connected SFTP client.
-
-    Used by SFTP-capable applications and ``connect_and_discover_programs()``.
-    """
+    """Return all URP paths through a caller-owned connected SFTP client."""
     folder = pathlib.PurePosixPath(root)
 
     return sorted(_walk_programs(sftp, folder, folder))
@@ -59,10 +56,7 @@ def connect_and_discover_programs(
     timeout: float = DEFAULT_TIMEOUT,
     trust_unknown_host_keys: bool = False,
 ) -> typing.List[str]:
-    """Connect over SFTP, discover URP files, and close the connection.
-
-    Used by ``urp_discovery_client`` and applications that prefer a one-call SFTP operation.
-    """
+    """Connect over SFTP, discover URP files, and close the connection."""
     import paramiko
 
     ssh = paramiko.SSHClient()

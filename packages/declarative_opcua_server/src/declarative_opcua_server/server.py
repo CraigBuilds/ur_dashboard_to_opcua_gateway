@@ -1,16 +1,6 @@
-"""Implement the package's fixed Status, Parameters, and Methods address space.
-
-``create_server()`` validates three flat mappings and returns a configured ``asyncua.sync.Server``. Status getters are polled on a small background thread and
-changed values are written through ``asyncua`` so ordinary OPC UA subscriptions receive notifications. The thread follows the lifetime of asyncua's own thread
-loop, leaving startup, shutdown, and context management to the returned server. Parameter setters are installed at the server's attribute-write boundary, and
-method functions are wrapped to hide the parent-node argument required by ``asyncua``.
-
-Function annotations are part of the runtime contract. A small internal map supports scalar booleans, integers, doubles, strings, and byte strings, plus
-homogeneous one-dimensional ``typing.List`` values of those types. Unsupported, unresolved, or contextually invalid signatures fail while the server is being
-created rather than producing a malformed address space later.
-
-This implementation module depends on ``asyncua`` plus standard-library inspection, threading, typing, logging, and dataclass support. The package root
-re-exports ``create_server()``; binding records, type resolution, polling, and callback wrappers remain private.
+"""
+TODO Explain what this module does and how to use it.
+The single public function is `create_server`.
 """
 
 import copy
@@ -48,6 +38,60 @@ _SCALAR_TYPE_DEFINITIONS: typing.Dict[typing.Type[typing.Any], typing.Tuple[asyn
     bytes: (asyncua.ua.VariantType.ByteString, b""),
 }
 
+def create_server(
+    *,
+    status_interface: _StatusInterface,
+    parameter_interface: _ParameterInterface,
+    method_interface: _MethodInterface,
+    endpoint: str = _DEFAULT_ENDPOINT,
+    namespace: str = _DEFAULT_NAMESPACE,
+    root_object: str = _DEFAULT_ROOT_OBJECT,
+) -> asyncua.sync.Server:
+    """Create a configured plain asyncua synchronous server."""
+
+    _validate_names("Status interface", status_interface)
+    _validate_names("Parameter interface", parameter_interface)
+    _validate_names("Method interface", method_interface)
+    status_definitions = [(name, reader, _status_definition(name, reader)) for name, reader in status_interface.items()]
+    parameter_definitions = [(name, writer, _parameter_definition(name, writer)) for name, writer in parameter_interface.items()]
+
+    method_definitions = [(name, method, _method_definition(name, method)) for name, method in method_interface.items()]
+
+    server = asyncua.sync.Server()
+    server.set_endpoint(endpoint)
+    server.set_server_name(f"{root_object} OPC UA Server")
+    server.set_security_policy([asyncua.ua.SecurityPolicyType.NoSecurity])
+    server.set_security_IDs(["Anonymous"])
+    namespace_index = server.register_namespace(namespace)
+    root = server.nodes.objects.add_object(namespace_index, root_object)
+    status_folder = root.add_folder(namespace_index, "Status")
+    parameter_folder = root.add_folder(namespace_index, "Parameters")
+    method_folder = root.add_folder(namespace_index, "Methods")
+    status_bindings: typing.List[_StatusBinding] = []
+
+    for name, reader, status_definition in status_definitions:
+        variant_type, default_value, python_type, is_array = status_definition
+        initial_variant = asyncua.ua.Variant(default_value, variant_type)
+        variable = status_folder.add_variable(namespace_index, name, initial_variant)
+        variable.set_writable(False)
+        status_bindings.append(_StatusBinding(name, variable, reader, variant_type, python_type, is_array, default_value))
+
+    for name, writer, parameter_definition in parameter_definitions:
+        variant_type, default_value, python_type, is_array = parameter_definition
+        initial_variant = asyncua.ua.Variant(default_value, variant_type)
+        variable = parameter_folder.add_variable(namespace_index, name, initial_variant)
+        variable.set_writable(True)
+        _install_parameter_writer(server, variable, name, writer, python_type, is_array)
+
+    for name, method, method_definition in method_definitions:
+        inputs, output = method_definition
+        input_arguments = [_method_argument(argument_name, argument_definition) for argument_name, argument_definition in inputs]
+        output_arguments = [] if output is None else [_method_argument("Result", output)]
+        method_folder.add_method(namespace_index, name, _adapt_method(method), input_arguments, output_arguments)
+
+    _start_status_polling(server, status_bindings)
+
+    return server
 
 @dataclasses.dataclass
 class _StatusBinding:
@@ -64,10 +108,10 @@ class _StatusBinding:
 
 def _poll_status(server: asyncua.sync.Server, bindings: typing.Sequence[_StatusBinding]) -> None:
     """Publish changed status values while asyncua's thread loop is alive."""
-    while server.tloop.is_alive():
+    while server.tloop.is_alive(): #type: ignore
         time.sleep(_POLL_INTERVAL_SECONDS)
 
-        if not server.tloop.is_alive():
+        if not server.tloop.is_alive(): #type: ignore
             return
 
         if server.aio_obj.bserver is None:
@@ -256,10 +300,10 @@ def _method_argument(name: str, definition: _TypeDefinition) -> asyncua.ua.Argum
     """Create one typed OPC UA method argument declaration."""
     variant_type, _default_value, _python_type, is_array = definition
     argument = asyncua.ua.Argument()
-    argument.Name = name
-    argument.DataType = asyncua.ua.NodeId(variant_type.value)
-    argument.ValueRank = 1 if is_array else -1
-    argument.ArrayDimensions = [0] if is_array else []
+    argument.Name = name #type: ignore
+    argument.DataType = asyncua.ua.NodeId(variant_type.value) #type: ignore
+    argument.ValueRank = 1 if is_array else -1 #type: ignore
+    argument.ArrayDimensions = [0] if is_array else [] #type: ignore
 
     return argument
 
@@ -288,62 +332,3 @@ def _install_parameter_writer(
         node_data.attributes[attribute].value = data_value
 
     server.aio_obj.set_attribute_value_setter(variable.nodeid, set_value)
-
-
-def create_server(
-    *,
-    status_interface: _StatusInterface,
-    parameter_interface: _ParameterInterface,
-    method_interface: _MethodInterface,
-    endpoint: str = _DEFAULT_ENDPOINT,
-    namespace: str = _DEFAULT_NAMESPACE,
-    root_object: str = _DEFAULT_ROOT_OBJECT,
-) -> asyncua.sync.Server:
-    """Create a configured plain asyncua synchronous server.
-
-    Used by applications that need a compact synchronous OPC UA adapter, including
-    ``ur_dashboard_to_opcua_gateway._03_compose_gateway``.
-    """
-    _validate_names("Status interface", status_interface)
-    _validate_names("Parameter interface", parameter_interface)
-    _validate_names("Method interface", method_interface)
-    status_definitions = [(name, reader, _status_definition(name, reader)) for name, reader in status_interface.items()]
-    parameter_definitions = [(name, writer, _parameter_definition(name, writer)) for name, writer in parameter_interface.items()]
-
-    method_definitions = [(name, method, _method_definition(name, method)) for name, method in method_interface.items()]
-
-    server = asyncua.sync.Server()
-    server.set_endpoint(endpoint)
-    server.set_server_name(f"{root_object} OPC UA Server")
-    server.set_security_policy([asyncua.ua.SecurityPolicyType.NoSecurity])
-    server.set_security_IDs(["Anonymous"])
-    namespace_index = server.register_namespace(namespace)
-    root = server.nodes.objects.add_object(namespace_index, root_object)
-    status_folder = root.add_folder(namespace_index, "Status")
-    parameter_folder = root.add_folder(namespace_index, "Parameters")
-    method_folder = root.add_folder(namespace_index, "Methods")
-    status_bindings: typing.List[_StatusBinding] = []
-
-    for name, reader, status_definition in status_definitions:
-        variant_type, default_value, python_type, is_array = status_definition
-        initial_variant = asyncua.ua.Variant(default_value, variant_type)
-        variable = status_folder.add_variable(namespace_index, name, initial_variant)
-        variable.set_writable(False)
-        status_bindings.append(_StatusBinding(name, variable, reader, variant_type, python_type, is_array, default_value))
-
-    for name, writer, parameter_definition in parameter_definitions:
-        variant_type, default_value, python_type, is_array = parameter_definition
-        initial_variant = asyncua.ua.Variant(default_value, variant_type)
-        variable = parameter_folder.add_variable(namespace_index, name, initial_variant)
-        variable.set_writable(True)
-        _install_parameter_writer(server, variable, name, writer, python_type, is_array)
-
-    for name, method, method_definition in method_definitions:
-        inputs, output = method_definition
-        input_arguments = [_method_argument(argument_name, argument_definition) for argument_name, argument_definition in inputs]
-        output_arguments = [] if output is None else [_method_argument("Result", output)]
-        method_folder.add_method(namespace_index, name, _adapt_method(method), input_arguments, output_arguments)
-
-    _start_status_polling(server, status_bindings)
-
-    return server

@@ -43,10 +43,8 @@ def _program_method_name(program: str) -> str:
 
 
 def compose_gateway(args: parse_command_line_args.Args) -> typing.Any:
-    """Compose package operations into the configured gateway server.
+    """Compose package operations into the configured gateway server."""
 
-    Used by ``_01_main.main()`` between argument parsing and process lifecycle management.
-    """
     # Reuse one configured callable for startup method generation and the live ListPrograms method.
     discover_programs = functools.partial(
         urp_discovery_client.discover_programs,
@@ -58,13 +56,19 @@ def compose_gateway(args: parse_command_line_args.Args) -> typing.Any:
         port=args.sftp_port,
         trust_unknown_host_keys=True,
     )
+
+    # Call the callable to produce list of programs that will become opcua methods
     programs = discover_programs()
     if len({_program_method_name(program) for program in programs}) != len(programs):
         raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
 
+    # Create the opcua server
     return declarative_opcua_server.create_server(
+        # Create read-only opcua nodes that poll dashboard_client.get_program_state to continuously update the program state node
         status_interface={"ProgramState": functools.partial(dashboard_client.get_program_state, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)},
+        # Create write-only opcua nodes that call the given callback whenever a client writes to them.
         parameter_interface={},
+        # Create opcua methods that call the given callback whenever a client invokes them.
         method_interface={
             "ListPrograms": discover_programs,
             "LoadProgram": functools.partial(dashboard_client.load_program, args.dashboard_host, port=args.dashboard_port, timeout=_DASHBOARD_TIMEOUT),
@@ -78,6 +82,7 @@ def compose_gateway(args: parse_command_line_args.Args) -> typing.Any:
                 for program in programs
             },
         },
+        # Create opcua server with the given endpoint, namespace, and root object name.
         endpoint=args.opcua_endpoint,
         namespace=OPC_NAMESPACE,
         root_object=_ROOT_OBJECT,

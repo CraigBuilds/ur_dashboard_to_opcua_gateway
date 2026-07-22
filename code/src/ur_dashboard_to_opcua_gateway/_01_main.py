@@ -39,10 +39,7 @@ def _run_until_stopped(server: typing.Any) -> None:
 
 
 def main() -> None:
-    """Start the gateway.
-
-    Used by the ``ur_dashboard_to_opcua_gateway`` console script and direct module execution.
-    """
+    """Start the gateway"""
     args = parse_command_line_args.parse_args()
     server = compose_gateway.compose_gateway(args)
     _run_until_stopped(server)

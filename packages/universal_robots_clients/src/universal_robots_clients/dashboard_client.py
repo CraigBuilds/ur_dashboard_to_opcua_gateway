@@ -54,7 +54,7 @@ def send_command(host: str, command: str, port: int = DEFAULT_PORT, timeout: flo
     connection = socket.create_connection((host, port), timeout)
 
     with connection:
-        stream = connection.makefile("rwb")
+        stream = typing.cast(typing.BinaryIO, connection.makefile("rwb"))
 
         with stream:
             response = _exchange(stream, command)

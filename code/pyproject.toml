@@ -31,6 +31,11 @@ format = [
     "mdformat>=0.7,<1",
     "mdformat-gfm>=0.3,<1",
 ]
+type-check = [
+    "mypy==1.14.1",
+    "pytest>=8,<9",
+    "types-paramiko==3.5.0.20240928",
+]
 
 [project.scripts]
 ur_dashboard_to_opcua_gateway = "ur_dashboard_to_opcua_gateway._01_main:main"
@@ -42,3 +47,26 @@ where = ["src"]
 line-length = 160
 target-version = ["py38"]
 skip-magic-trailing-comma = true
+
+[tool.mypy]
+python_version = "3.8"
+files = [
+    "code/src",
+    "packages/declarative_opcua_server/src",
+    "packages/declarative_opcua_server/tests",
+    "packages/universal_robots_clients/src",
+    "packages/universal_robots_clients/tests",
+    "tests",
+]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["asyncua", "asyncua.*", "testcontainers", "testcontainers.*"]
+ignore_missing_imports = true

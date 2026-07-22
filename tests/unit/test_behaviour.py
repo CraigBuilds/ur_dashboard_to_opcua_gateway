@@ -31,7 +31,14 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
     """Resolve prompted credentials and every configurable endpoint override."""
     monkeypatch.delenv("UR_ROBOT_PASSWORD", raising=False)
     prompts: typing.List[str] = []
-    monkeypatch.setattr(parse_command_line_args.getpass, "getpass", lambda prompt: prompts.append(prompt) or "prompted-secret")
+
+    def prompt_for_password(prompt: str) -> str:
+        """Capture the prompt and return one deterministic password."""
+        prompts.append(prompt)
+
+        return "prompted-secret"
+
+    monkeypatch.setattr(parse_command_line_args.getpass, "getpass", prompt_for_password)
     args = parse_command_line_args.parse_args(
         [
             "--catalog",

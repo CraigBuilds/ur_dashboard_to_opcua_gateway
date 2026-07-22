@@ -7,4 +7,5 @@ All notable changes to this package are documented here.
 - Provide focused Dashboard, RTDE, local discovery, SFTP discovery, and discovery-selection modules.
 - Add persistent typed RTDE register access through the optional `rtde` extra.
 - Keep Paramiko optional and isolated behind the `sftp` extra.
+- Add a standalone MyPy configuration and complete public boundary annotations.
 - Support Python 3.8.3 and later.

@@ -9,4 +9,6 @@ Paramiko only when connecting, and the RTDE client loads optional ``ur-rtde`` on
 gateway.
 """
 
-__all__ = []
+import typing
+
+__all__: typing.List[str] = []

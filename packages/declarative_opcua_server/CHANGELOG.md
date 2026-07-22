@@ -9,4 +9,5 @@ All notable changes to this package are documented here.
 - Infer OPC UA scalar and list types from Python annotations.
 - Keep polling and write subscriptions alive through resources owned by the returned server.
 - Bound interpreter-specific dependencies so clean Python 3.8 installations remain resolvable.
+- Add a standalone MyPy configuration and correct internal definition annotations.
 - Support Python 3.8.3 and later.

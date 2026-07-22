@@ -8,7 +8,7 @@ RTDE, and exposes the result as a compact OPC UA interface.
 - Discover `.urp` programs recursively from a local directory or SFTP.
 - List programs and load any selected program through generic OPC UA methods.
 - Run, pause, or stop the currently loaded robot program.
-- Create one no-argument start method for every program discovered at startup.
+- Create one no-argument start method for every discovered program and refresh those nodes without restarting.
 - Poll and publish the current Dashboard program state.
 - Publish TCP, joint, mode, stop, speed, and tool-I/O status from one persistent RTDE connection.
 - Let OPC UA clients set the robot speed slider and both tool digital outputs.
@@ -48,13 +48,15 @@ Objects/
             RunProgram() -> String
             PauseProgram() -> String
             StopProgram() -> String
+            RefreshPrograms() -> String[]
             StartProgram_Main()
             StartProgram_Production_PickPart()
 ```
 
 The generic methods support discovery and low-level lifecycle control, while each generated `StartProgram_...()` method provides a convenient load-then-run
-operation. Status variables are read-only and continuously polled. Parameter variables are writable commands: a write is sent to the robot before the OPC UA
-value is retained.
+operation. `RefreshPrograms()` rediscovers the configured local or SFTP folder, returns the new sorted catalogue, and makes the generated method nodes match it
+without restarting the gateway. Status variables are read-only and continuously polled. Parameter variables are writable commands: a write is sent to the robot
+before the OPC UA value is retained.
 
 ### Status values and units
 

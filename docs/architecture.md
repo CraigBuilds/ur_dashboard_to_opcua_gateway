@@ -36,7 +36,7 @@ There are no application adapter modules between the composition root and the re
 
 ### declarative-opcua-server
 
-The package exposes only `declarative_opcua_server.create_server()`. It receives three flat mappings:
+The package exposes `declarative_opcua_server.create_server()` and `update_method_interface()`. Server creation receives three flat mappings:
 
 ```python
 server = declarative_opcua_server.create_server(
@@ -57,8 +57,9 @@ Application/
 
 Function annotations map `bool`, `int`, `float`, `str`, `bytes`, and homogeneous `typing.List` values to OPC UA types. Required annotated method arguments
 become OPC UA inputs, and an annotated return becomes an output. The package validates every interface before allocating and returning a plain
-`asyncua.sync.Server`, adapts method callbacks, intercepts parameter writes, and publishes changed status values. It does not know about robots, application
-schemas, or process signals.
+`asyncua.sync.Server`, adapts method callbacks, intercepts parameter writes, and publishes changed status values. A complete replacement method mapping can add,
+remove, or replace live method nodes while preserving unchanged callables and NodeIds. The package does not know about robots, application schemas, or process
+signals.
 
 ### universal-robots-clients
 
@@ -109,11 +110,12 @@ main.main()
     -> main._run_until_stopped(gateway)
 ```
 
-Discovery runs once during composition to generate a flat `StartProgram_...` method for each program. The root also exposes dynamic `ListPrograms`,
-`LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram` methods. A generated start method binds the reusable Dashboard `load_and_play_program()`
-operation, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter. The remaining status
-callbacks read RTDE telemetry, and parameter callbacks set the speed slider or tool outputs. The declarative server infers OPC UA types from those functions'
-annotations, polls status, and validates writes.
+Discovery runs during composition to generate a flat `StartProgram_...` method for each program. `RefreshPrograms` repeats discovery and passes the complete
+desired mapping to `declarative_opcua_server.update_method_interface()`, which changes the live `Methods` folder without restarting the server. Unchanged
+programs preserve their callbacks and nodes. The root also exposes dynamic `ListPrograms`, `LoadProgram(program)`, `RunProgram`, `PauseProgram`, and
+`StopProgram` methods. A generated start method binds the reusable Dashboard `load_and_play_program()` operation, while the generic methods let a client perform
+those steps separately. `ProgramState` uses the reusable Dashboard getter. The remaining status callbacks read RTDE telemetry, and parameter callbacks set the
+speed slider or tool outputs. The declarative server infers OPC UA types from those functions' annotations, polls status, and validates writes.
 
 The main module enters the composed gateway context and waits for `SIGINT` or `SIGTERM`. The wrapper starts/stops asyncua first and disconnects RTDE last, which
 prevents the status thread from polling a closed RTDE client. A failed server construction or startup also closes RTDE.

@@ -28,7 +28,7 @@ jobs:
       - name: Install unit-test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "declarative-opcua-server[test] @ https://github.com/CraigBuilds/declarative-opcua-server/archive/1f4cd1ccb37937cff690ea51fca860c9293b7ac8.zip"
+          python -m pip install "declarative-opcua-server[test] @ https://github.com/CraigBuilds/declarative-opcua-server/archive/13c95da4341a21c00243131a5f5cb13adf9e9e2f.zip"
           python -m pip install "universal-robots-clients[rtde,test] @ https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"
           python -m pip install -e "./code[test]"
 
@@ -53,7 +53,7 @@ jobs:
       - name: Install quality dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/1f4cd1ccb37937cff690ea51fca860c9293b7ac8.zip"
+          python -m pip install "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/13c95da4341a21c00243131a5f5cb13adf9e9e2f.zip"
           python -m pip install "universal-robots-clients @ https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"
           python -m pip install -e "./code[format,type-check]"
 
@@ -80,7 +80,7 @@ jobs:
       - name: Install system-test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/1f4cd1ccb37937cff690ea51fca860c9293b7ac8.zip"
+          python -m pip install "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/13c95da4341a21c00243131a5f5cb13adf9e9e2f.zip"
           python -m pip install "universal-robots-clients[sftp,rtde] @ https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"
           python -m pip install -e "./code[system-test]"
 

@@ -24,9 +24,10 @@
 ### OPC UA
 
 - Create fixed, flat `Status`, `Parameters`, and `Methods` folders beneath `Objects/UR20`.
-- Add one no-argument `StartProgram_...()` method for every program discovered at startup.
+- Add one no-argument `StartProgram_...()` method for every discovered program.
 - Add dynamic `ListPrograms()`, `LoadProgram(program)`, and `RunProgram()` methods for clients that need separate low-level operations.
 - Add controller-wide `PauseProgram()` and `StopProgram()` methods.
+- Add `RefreshPrograms()` to rediscover the configured catalogue and update generated method nodes without restarting.
 - Poll the Dashboard program-state getter into the read-only `Status/ProgramState` variable.
 - Poll RTDE connection, controller mode, safety mode, runtime state, stop flags, TCP pose/speed/force, joint position/temperature, speed, and tool I/O into
   typed read-only status variables.
@@ -50,7 +51,6 @@
 
 These are accepted MVP limitations:
 
-- Program start methods are generated only at startup.
 - Dashboard responses remain uninterpreted text. Generic lifecycle methods and generated start methods return the final Dashboard response, but do not map
   controller failures to OPC UA status codes.
 - A generated start method performs load followed by play without validating the load response.
@@ -72,8 +72,8 @@ The package boundaries and compact composition root are intended to support thes
 ### Flat program methods
 
 - Keep one start method per discovered program, with deterministic names such as `StartProgram_Production_PickPart`.
-- Decide how program additions, removals, renames, and flattening collisions update the method interface. The current startup snapshot can remain the MVP, while
-  later versions may support explicit refresh and controlled server reconstruction.
+- Preserve unchanged method nodes during explicit refresh, add newly discovered programs, remove missing programs, and reject flattening collisions before
+  changing the live interface.
 - Add typed task metadata outside the reusable OPC UA package when parameters are enabled. The package should continue to receive already composed flat
   dictionaries rather than discover programs or understand task schemas itself.
 - Keep controller-wide pause, stop, and state behavior separate from generated program methods.

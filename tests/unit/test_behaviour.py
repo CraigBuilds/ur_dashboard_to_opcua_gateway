@@ -99,6 +99,7 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     """Bind package operations into typed flat interfaces and retain execution order."""
     calls: typing.List[typing.Tuple[str, typing.Tuple[object, ...]]] = []
     captured: typing.Dict[str, object] = {}
+    updates: typing.List[typing.Tuple[object, typing.Mapping[str, typing.Callable[..., object]]]] = []
 
     def load(host: str, program: str, port: int, timeout: float) -> str:
         calls.append(("load", (host, program, port, timeout)))
@@ -159,7 +160,9 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
         return ["Main.urp", "Production/Pick Part.urp"]
 
     monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", discover)
-    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or object())
+    created_server = object()
+    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or created_server)
+    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "update_method_interface", lambda server, interface: updates.append((server, interface)))
 
     compose_gateway.compose_gateway(args)
 
@@ -173,6 +176,7 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
         "RunProgram",
         "PauseProgram",
         "StopProgram",
+        "RefreshPrograms",
         "StartProgram_Main",
         "StartProgram_Production_Pick_Part",
     }
@@ -208,7 +212,14 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     method_interface["StartProgram_Production_Pick_Part"]()
     method_interface["PauseProgram"]()
     method_interface["StopProgram"]()
-    assert len(discoveries) == 2
+    assert method_interface["RefreshPrograms"]() == ["Main.urp", "Production/Pick Part.urp"]
+    assert len(discoveries) == 3
+    assert len(updates) == 1
+    updated_server, updated_interface = updates[0]
+    assert updated_server is created_server
+    assert set(updated_interface) == set(method_interface)
+    assert updated_interface["RefreshPrograms"] is method_interface["RefreshPrograms"]
+    assert updated_interface["StartProgram_Main"] is method_interface["StartProgram_Main"]
     connect.assert_called_once_with("rtde", frequency=20.0)
     writer.setSpeedSlider.assert_called_once_with(0.4)
     assert writer.setToolDigitalOut.call_args_list == [unittest.mock.call(0, True), unittest.mock.call(1, False)]

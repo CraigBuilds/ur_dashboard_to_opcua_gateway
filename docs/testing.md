@@ -99,9 +99,9 @@ python tests/system/run.py --collect-only
 ```
 
 For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, checks every basic RTDE status type, changes the
-speed slider and a tool output, lists programs, loads and runs a selected program through generic methods, invokes generated program start methods, pauses and
-stops execution, and confirms loaded and playing state directly through URSim. Direct Dashboard, RTDE, and discovery contracts run in the robot-client package
-repository instead of being duplicated here.
+speed slider and a tool output, lists programs, adds a URP, refreshes and invokes its new generated method, removes it and refreshes again, loads and runs a
+selected program through generic methods, invokes generated program start methods, pauses and stops execution, and confirms loaded and playing state directly
+through URSim. Direct Dashboard, RTDE, and discovery contracts run in the robot-client package repository instead of being duplicated here.
 
 The local arrangement mounts programs and shares the URSim network namespace. The SFTP arrangement uses a private Docker network containing the gateway, URSim,
 and OpenSSH. The same OPC UA contract must pass in both cases. The two gateway variants run sequentially against the shared lab because only one process may own

@@ -8,6 +8,8 @@ import asyncua.sync
 import pytest
 import ur_dashboard_to_opcua_gateway.gateway as compose_gateway
 
+import tests.support.program_fixture as program_fixture
+
 if sys.version_info < (3, 10):
     pytest.skip("Container-backed system tests require Python 3.10 or newer.", allow_module_level=True)
 
@@ -94,9 +96,26 @@ def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typi
             wait_for_status(child(status, namespace, "GripperOutput0"), lambda value: value is False, "GripperOutput0")
             expected_method_names = {"StartProgram_" + "_".join(part.replace(".urp", "") for part in program.split("/")) for program in expected}
             actual_method_names = {node.read_browse_name().Name for node in methods.get_children()}
-            assert expected_method_names | {"ListPrograms", "LoadProgram", "RunProgram", "PauseProgram", "StopProgram"} == actual_method_names
+            fixed_method_names = {"ListPrograms", "LoadProgram", "RunProgram", "PauseProgram", "StopProgram", "RefreshPrograms"}
+            assert expected_method_names | fixed_method_names == actual_method_names
 
             assert call(methods, namespace, "ListPrograms") == expected
+            refreshed_program = program_fixture.write_program(lab.programs, "Refreshed")
+
+            try:
+                refreshed_catalogue = [*expected, "Refreshed.urp"]
+                assert call(methods, namespace, "RefreshPrograms") == refreshed_catalogue
+                call(methods, namespace, "StartProgram_Refreshed")
+                lab.ursim.wait_for_program_state("PLAYING")
+                assert "Refreshed.urp" in lab.ursim.command("get loaded program")
+                call(methods, namespace, "StopProgram")
+                lab.ursim.wait_for_program_state("STOPPED")
+            finally:
+                lab.ursim.command("stop")
+                refreshed_program.unlink(missing_ok=True)
+
+            assert call(methods, namespace, "RefreshPrograms") == expected
+            assert {node.read_browse_name().Name for node in methods.get_children()} == expected_method_names | fixed_method_names
             call(methods, namespace, "LoadProgram", "Main.urp")
             assert "Main.urp" in lab.ursim.command("get loaded program")
             call(methods, namespace, "RunProgram")

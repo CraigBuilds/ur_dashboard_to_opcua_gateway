@@ -81,6 +81,7 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
         "RunProgram",
         "PauseProgram",
         "StopProgram",
+        "RefreshPrograms",
         "StartProgram_Main",
     }
     assert captured["endpoint"] == args.opcua_endpoint

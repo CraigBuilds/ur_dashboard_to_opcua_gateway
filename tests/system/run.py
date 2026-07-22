@@ -12,7 +12,7 @@ import typing
 _MINIMUM_PYTHON = (3, 10)
 _PROJECT_CACHE_NAME = "ur_dashboard_to_opcua_gateway"
 _DECLARATIVE_SERVER_REQUIREMENT = (
-    "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/1f4cd1ccb37937cff690ea51fca860c9293b7ac8.zip"
+    "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/13c95da4341a21c00243131a5f5cb13adf9e9e2f.zip"
 )
 _ROBOT_CLIENTS_REQUIREMENT = (
     "universal-robots-clients[sftp,rtde] @ " "https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"

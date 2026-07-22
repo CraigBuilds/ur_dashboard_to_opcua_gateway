@@ -101,10 +101,51 @@ def compose_gateway(args: parse_command_line_args.Args) -> _Gateway:
         trust_unknown_host_keys=True,
     )
 
-    # Call the callable to produce list of programs that will become opcua methods
+    # Fixed method callables are created once so refreshes preserve their OPC UA nodes and NodeIds. Generated methods are cached by both exposed name and source
+    # path; an unchanged program therefore keeps its node, while a rename that normalizes to the same name replaces the bound Dashboard callback.
+    fixed_methods: typing.Dict[str, typing.Callable[..., typing.Any]] = {
+        "ListPrograms": discover_programs,
+        "LoadProgram": functools.partial(dashboard_client.load_program, args.dashboard_host, port=args.dashboard_port, timeout=_DASHBOARD_TIMEOUT),
+        "RunProgram": functools.partial(dashboard_client.play_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+        "PauseProgram": functools.partial(dashboard_client.pause_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+        "StopProgram": functools.partial(dashboard_client.stop_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+    }
+    generated_methods: typing.Dict[str, typing.Tuple[str, typing.Callable[..., typing.Any]]] = {}
+    server_holder: typing.Dict[str, typing.Any] = {}
+
+    def build_method_interface(programs: typing.List[str]) -> typing.Dict[str, typing.Callable[..., typing.Any]]:
+        """Build the complete desired method interface while retaining unchanged callbacks."""
+        named_programs = [(_program_method_name(program), program) for program in programs]
+
+        if len({name for name, _program in named_programs}) != len(named_programs):
+            raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
+
+        refreshed: typing.Dict[str, typing.Tuple[str, typing.Callable[..., typing.Any]]] = {}
+
+        for name, program in named_programs:
+            previous = generated_methods.get(name)
+            method = (
+                previous[1]
+                if previous is not None and previous[0] == program
+                else functools.partial(dashboard_client.load_and_play_program, args.dashboard_host, program, args.dashboard_port, _DASHBOARD_TIMEOUT)
+            )
+            refreshed[name] = (program, method)
+
+        generated_methods.clear()
+        generated_methods.update(refreshed)
+
+        return {**fixed_methods, "RefreshPrograms": refresh_programs, **{name: method for name, (_program, method) in refreshed.items()}}
+
+    def refresh_programs() -> typing.List[str]:
+        """Rediscover programs and make the generated OPC UA methods match the result."""
+        programs = discover_programs()
+        declarative_opcua_server.update_method_interface(server_holder["server"], build_method_interface(programs))
+
+        return programs
+
+    # Validate the initial catalogue before opening the persistent RTDE connection.
     programs = discover_programs()
-    if len({_program_method_name(program) for program in programs}) != len(programs):
-        raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
+    method_interface = build_method_interface(programs)
 
     # RTDE is a streaming protocol, so one client stays connected for the whole gateway lifetime. A separate host is useful when Dashboard is port-forwarded;
     # the normal case simply reuses the Dashboard host.
@@ -142,20 +183,8 @@ def compose_gateway(args: parse_command_line_args.Args) -> _Gateway:
                 "GripperOutput0": functools.partial(_write_gripper_output, client, 0),
                 "GripperOutput1": functools.partial(_write_gripper_output, client, 1),
             },
-            # Methods are request/response operations. Generic program methods stay available alongside one convenient no-argument method per discovered URP.
-            method_interface={
-                "ListPrograms": discover_programs,
-                "LoadProgram": functools.partial(dashboard_client.load_program, args.dashboard_host, port=args.dashboard_port, timeout=_DASHBOARD_TIMEOUT),
-                "RunProgram": functools.partial(dashboard_client.play_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
-                "PauseProgram": functools.partial(dashboard_client.pause_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
-                "StopProgram": functools.partial(dashboard_client.stop_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
-                **{
-                    _program_method_name(program): functools.partial(
-                        dashboard_client.load_and_play_program, args.dashboard_host, program, args.dashboard_port, _DASHBOARD_TIMEOUT
-                    )
-                    for program in programs
-                },
-            },
+            # Methods are request/response operations. RefreshPrograms rediscovers URPs and declaratively replaces this complete mapping on the live server.
+            method_interface=method_interface,
             endpoint=args.opcua_endpoint,
             namespace=OPC_NAMESPACE,
             root_object=_ROOT_OBJECT,
@@ -163,5 +192,7 @@ def compose_gateway(args: parse_command_line_args.Args) -> _Gateway:
     except BaseException:
         rtde_client.disconnect(client)
         raise
+
+    server_holder["server"] = server
 
     return _Gateway(server, client)

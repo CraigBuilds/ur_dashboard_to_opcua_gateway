@@ -2,12 +2,6 @@ FROM python:3.12-slim
 
 WORKDIR /workspace
 
-# These immutable GitHub archives bridge the short interval before the same versions are released on PyPI. Once published, the gateway dependency declaration
-# resolves both packages directly and these two explicit requirements can be removed.
-RUN python -m pip install --no-cache-dir \
-    "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/13c95da4341a21c00243131a5f5cb13adf9e9e2f.zip" \
-    "universal-robots-clients[sftp,rtde] @ https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"
-
 COPY code/pyproject.toml ./code/pyproject.toml
 COPY code/src ./code/src
 

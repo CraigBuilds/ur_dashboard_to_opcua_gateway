@@ -19,7 +19,7 @@ Before a public release:
 1. Confirm the distribution names are still available on PyPI or controlled by the intended owner.
 1. Update the package version and package-local `CHANGELOG.md` together.
 1. Run the package repository's Python 3.8, current-Python, and real-service test suites.
-1. Use a scoped PyPI API token through the publishing environment. Do not commit credentials or place them on a command line.
+1. Configure the package repository's `release.yml` as a PyPI trusted publisher using the `pypi` GitHub environment. Do not commit API tokens or passwords.
 
 ## Build and inspect
 
@@ -38,11 +38,13 @@ The parent repository's system test remains the compatibility contract between t
 
 ## PyPI
 
-Upload the exact tested artifacts from each package repository:
+Push the matching version tag to run the package repository's release workflow:
 
 ```bash
-python -m twine upload dist/*
+git tag -a v0.3.0 -m "Release 0.3.0"
+git push origin v0.3.0
 ```
 
-Then install by distribution name from PyPI in a new environment, rerun smoke tests, create the matching Git tag, and confirm that the gateway resolves the
-released versions without the temporary GitHub-archive bridge. Published versions are immutable; fixes require a new version rather than replacing an artifact.
+The workflow validates that the tag matches the package version, builds the exact artifacts, and exchanges GitHub's OIDC identity for a short-lived PyPI
+publishing token. Then install by distribution name from PyPI in a new environment, rerun smoke tests, and confirm that the gateway resolves the released
+versions. Published versions are immutable; fixes require a new version rather than replacing an artifact.

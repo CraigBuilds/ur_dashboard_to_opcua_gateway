@@ -112,19 +112,17 @@ Dashboard/RTDE communication and OPC UA hosting live in the reusable packages.
 
 ## Install
 
-After both dependencies are published on PyPI, install the gateway and its runtime dependencies in one command:
+Install the gateway and its runtime dependencies from PyPI in one command:
 
 ```bash
-python -m pip install -e ./code
+python -m pip install -e "./code[sftp]"
 ```
 
-Until that first PyPI release, CI and the Dockerfile install immutable commits from the public package repositories. For local gateway development, clone the
-three repositories beside one another and install the two package checkouts first:
+For local gateway development, install the gateway with its test and quality extras. The released `declarative-opcua-server==0.3.0` and
+`universal-robots-clients==0.3.0` dependencies resolve from PyPI:
 
 ```bash
-python -m pip install -e "../declarative-opcua-server"
-python -m pip install -e "../universal-robots-clients[sftp,rtde]"
-python -m pip install --no-deps -e "./code[sftp,test,format,type-check]"
+python -m pip install -e "./code[sftp,test,format,type-check]"
 ```
 
 Python 3.8.3 or later is supported. `declarative-opcua-server` selects the compatible `asyncua` 1.x line, starting at 1.1.5, on Python 3.8 and 3.9 and the 2.x
@@ -166,7 +164,7 @@ change the receive rate.
 
 ## Docker
 
-Build the image with the repository root as context. During the pre-PyPI bridge, the Dockerfile installs immutable package-repository archives:
+Build the image with the repository root as context. The Docker build resolves the two released reusable packages from PyPI:
 
 ```bash
 docker build -f code/Dockerfile -t ur_dashboard_to_opcua_gateway .

@@ -11,12 +11,6 @@ import typing
 
 _MINIMUM_PYTHON = (3, 10)
 _PROJECT_CACHE_NAME = "ur_dashboard_to_opcua_gateway"
-_DECLARATIVE_SERVER_REQUIREMENT = (
-    "declarative-opcua-server @ https://github.com/CraigBuilds/declarative-opcua-server/archive/13c95da4341a21c00243131a5f5cb13adf9e9e2f.zip"
-)
-_ROBOT_CLIENTS_REQUIREMENT = (
-    "universal-robots-clients[sftp,rtde] @ " "https://github.com/CraigBuilds/universal-robots-clients/archive/d680e68555ddabd0eecd67de73a9ad4a22ff4d4f.zip"
-)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -189,7 +183,6 @@ def _install_dependencies(python: pathlib.Path, repository: pathlib.Path) -> Non
     with tempfile.TemporaryDirectory(prefix="ur_dashboard_to_opcua_gateway_system_tests_") as temporary:
         destination = pathlib.Path(temporary)
         gateway_package = _copy_project_for_install(repository / "code", destination)
-        _run([str(python), "-m", "pip", "install", _DECLARATIVE_SERVER_REQUIREMENT, _ROBOT_CLIENTS_REQUIREMENT], repository)
         _run([str(python), "-m", "pip", "install", f"{gateway_package}[system-test]"], repository)
 
 

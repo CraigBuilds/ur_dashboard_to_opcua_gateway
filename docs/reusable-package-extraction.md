@@ -241,13 +241,10 @@ resource has enough independent behavior to justify its own tests and lifecycle 
 
 ## Local development and release path
 
-Clone the three repositories beside one another. Before the initial PyPI releases, install the external projects first and suppress gateway dependency
-resolution:
+Install the gateway and let pip resolve the released reusable packages from PyPI:
 
 ```bash
-python -m pip install -e ../declarative-opcua-server
-python -m pip install -e "../universal-robots-clients[sftp,rtde]"
-python -m pip install --no-deps -e "./code[sftp,system-test]"
+python -m pip install -e "./code[sftp,system-test]"
 ```
 
 Release preparation completed in the package repositories includes:
@@ -258,11 +255,12 @@ Release preparation completed in the package repositories includes:
 - CI jobs that repeat build, metadata, clean-install, import, and package-owned test checks for every change.
 - Real Dashboard and RTDE tests against official URSim plus local-filesystem and real OpenSSH/SFTP discovery tests in `universal-robots-clients`.
 
-The remaining release steps are:
+The initial reusable-package release completed with:
 
-1. Publish the exact validated artifacts to PyPI with a scoped owner token and record matching Git tags.
-1. Replace the gateway's temporary immutable GitHub-archive installation with normal package-index resolution after those releases are verified.
-1. Keep the gateway system suite as the compatibility contract between released versions and add failure-focused tests before promoting beyond alpha.
+1. Version 0.3.0 artifacts published through PyPI trusted publishing with matching Git tags.
+1. Normal package-index resolution in gateway development, CI, Docker, and system-test environments.
+1. The gateway system suite retained as the compatibility contract between released versions; failure-focused tests remain required before promotion beyond
+   alpha.
 
 Independent publication introduces versioning, changelog, CI, security, and compatibility costs. Those costs are justified only if each package remains useful
 without the gateway, which the current boundaries now demonstrate.

@@ -16,16 +16,11 @@ Executable tests are organized by both distribution ownership and scope:
 
 ## Installation
 
-Clone the three repositories beside one another. Until the package versions are available from PyPI, install the external package checkouts and then the gateway
-without dependency resolution:
+Install the gateway with its SFTP, test, and quality extras. Its reusable-package dependencies resolve from PyPI:
 
 ```bash
-python -m pip install -e "../declarative-opcua-server"
-python -m pip install -e "../universal-robots-clients[sftp,rtde]"
-python -m pip install --no-deps -e "./code[sftp,test,format,type-check]"
+python -m pip install -e "./code[sftp,test,format,type-check]"
 ```
-
-After the first PyPI releases, `python -m pip install -e "./code[sftp,test,format,type-check]"` installs all declared dependencies normally.
 
 Run every non-container test:
 
@@ -127,6 +122,6 @@ The configuration treats untyped `asyncua` and `testcontainers` APIs as explicit
 
 ## CI
 
-GitHub Actions installs immutable commits of both external packages before the gateway. Unit jobs run gateway architecture and behavior tests on Python 3.8.3
-and 3.12. The quality job checks MyPy plus Python and Markdown formatting. The Python 3.12 system job runs the Docker-backed compatibility pipeline. Each
-package repository owns its own unit, quality, wheel, and real-service jobs.
+GitHub Actions installs the gateway and its released package dependencies from PyPI. Unit jobs run gateway architecture and behavior tests on Python 3.8.3 and
+3.12. The quality job checks MyPy plus Python and Markdown formatting. The Python 3.12 system job runs the Docker-backed compatibility pipeline. Each package
+repository owns its own unit, quality, wheel, and real-service jobs.

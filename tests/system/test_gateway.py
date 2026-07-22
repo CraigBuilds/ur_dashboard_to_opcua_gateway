@@ -6,7 +6,7 @@ import typing
 
 import asyncua.sync
 import pytest
-import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
+import ur_dashboard_to_opcua_gateway.gateway as compose_gateway
 
 if sys.version_info < (3, 10):
     pytest.skip("Container-backed system tests require Python 3.10 or newer.", allow_module_level=True)
@@ -25,7 +25,7 @@ def child(parent: asyncua.sync.SyncNode, namespace: int, name: str) -> asyncua.s
 
 def call(parent: asyncua.sync.SyncNode, namespace: int, name: str, *arguments: object) -> object:
     """Call one OPC UA method beneath an object node."""
-    return parent.call_method(child(parent, namespace, name), *arguments)
+    return parent.call_method(child(parent, namespace, name), *arguments) #type: ignore
 
 
 def robot_node(client: asyncua.sync.Client) -> typing.Tuple[int, asyncua.sync.SyncNode]:

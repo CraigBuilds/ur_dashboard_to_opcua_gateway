@@ -1,6 +1,36 @@
 """
-TODO Explain what this module does and how to use it.
-The single public function is `create_server`.
+This package provides a wrapper around the ``asyncua`` OPC UA server.
+It provides a function that will return a configured server with status, parameter, and method nodes.
+The status nodes are read-only and will be updated by polling the provided status functions.
+The parameter nodes are write-only and will call the provided parameter functions when written to.
+The method nodes will call the provided method functions when invoked.
+
+For example:
+
+    import declarative_opcua_server
+
+    def get_status() -> int:
+        return 42
+
+    def set_parameter(value: str) -> None:
+        print(f"Parameter set to {value}")
+
+    def do_something(x: int, y: float) -> bool:
+        return x > y
+
+    server = declarative_opcua_server.create_server(
+        status_interface={"Status": get_status},
+        parameter_interface={"Parameter": set_parameter},
+        method_interface={"DoSomething": do_something},
+        endpoint="opc.tcp://foo:4840/",
+        namespace="urn:example",
+        root_object="MyServer",
+    )
+
+The example above will create an OPC UA server with a node called "Status", a node called "Parameter", and
+a method called "DoSomething". The "Status" node will be continuously updated by polling the ``get_status`` function, the
+"Parameter" node will call the ``set_parameter`` function when clients write to it, and the "DoSomething" method will
+call the ``do_something`` when clients invoke it.
 """
 
 import copy

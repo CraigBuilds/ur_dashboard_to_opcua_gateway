@@ -10,9 +10,9 @@ import pytest
 import universal_robots_clients.dashboard_client as dashboard_client
 import universal_robots_clients.urp_discovery_client as urp_discovery_client
 import universal_robots_clients.urp_discovery_sftp_client as urp_discovery_sftp_client
-import ur_dashboard_to_opcua_gateway._01_main as main_module
-import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
-import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
+import ur_dashboard_to_opcua_gateway.main as main_module
+import ur_dashboard_to_opcua_gateway.args as parse_command_line_args
+import ur_dashboard_to_opcua_gateway.gateway as compose_gateway
 
 import tests.support.program_fixture as program_fixture
 import tests.system.run as run_system_tests

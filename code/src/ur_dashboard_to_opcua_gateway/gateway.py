@@ -1,15 +1,7 @@
-"""Compose the complete gateway from reusable package functions.
-
-This module contains the small amount of product-specific policy left after extracting program discovery, Dashboard communication, and declarative OPC UA
-hosting into reusable packages. It selects local or SFTP discovery from ``Args``, binds the configured Dashboard endpoint, turns discovered program paths into
-flat OPC UA method names, and defines the gateway's fixed namespace and robot object name.
-
-``compose_gateway()`` is the main public API and returns a configured, unstarted server for ``_01_main`` to own. ``OPC_NAMESPACE`` is also public because OPC UA
-clients and the system tests use it to resolve the application namespace. Generated method names are the only private application policy; backend selection
-and protocol operations are supplied directly by reusable package functions.
-
-The module depends on ``_02_parse_command_line_args``, ``declarative_opcua_server``, and the ``dashboard_client`` and ``urp_discovery_client`` modules from
-``universal_robots_clients``. The reusable packages remain independent of this gateway; the discovery selector depends only on its two focused backends.
+"""
+This is the composition root of the package.
+It is responsible for wiring together the gateway's configuration, discovery, ur_clients, and server components into one  server object.
+It does not run the server; that is the responsibility of ``main.py``.
 """
 
 import functools
@@ -21,7 +13,7 @@ import declarative_opcua_server
 import universal_robots_clients.dashboard_client as dashboard_client
 import universal_robots_clients.urp_discovery_client as urp_discovery_client
 
-import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
+import ur_dashboard_to_opcua_gateway.args as parse_command_line_args
 
 __all__ = ["OPC_NAMESPACE", "compose_gateway"]
 

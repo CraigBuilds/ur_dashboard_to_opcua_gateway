@@ -1,4 +1,5 @@
-"""Define and resolve all configuration accepted by ``ur_dashboard_to_opcua_gateway``.
+"""
+Define and resolve all configuration accepted by ``ur_dashboard_to_opcua_gateway``.
 
 This module is the package's configuration boundary. It translates command-line options, environment values, defaults, and validation rules into one immutable
 ``Args`` dataclass so downstream modules consume resolved values rather than understanding ``argparse`` or prompting for credentials themselves. Local
@@ -7,9 +8,6 @@ prompt. The Dashboard host defaults to the SFTP robot host when appropriate.
 
 The public API consists of ``Args``, the shared configuration value object, and ``parse_args()``, which builds and executes the parser. Parser construction,
 password acquisition, and default resolution are internal helpers.
-
-This foundational module depends only on the Python standard library. It is consumed by ``_01_main`` and ``_03_compose_gateway`` but imports neither module;
-that direction keeps the package dependency graph acyclic.
 """
 
 import argparse

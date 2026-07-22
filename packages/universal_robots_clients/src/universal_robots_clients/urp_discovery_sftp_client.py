@@ -40,7 +40,7 @@ def _walk_programs(sftp: typing.Any, root: pathlib.PurePosixPath, folder: pathli
             yield path.relative_to(root).as_posix()
 
 
-def discover_programs(sftp: typing.Any, root: typing.Union[str, pathlib.PurePosixPath]) -> typing.List[str]:
+def discover_programs(sftp: typing.Any, root: typing.Union[str, pathlib.Path, pathlib.PurePosixPath]) -> typing.List[str]:
     """Return all URP paths through a caller-owned connected SFTP client.
 
     Used by SFTP-capable applications and ``connect_and_discover_programs()``.

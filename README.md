@@ -163,6 +163,15 @@ python -m black --config code/pyproject.toml code/src packages tests
 python -m mdformat --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
 ```
 
+## Type checking
+
+Run MyPy across the gateway, both reusable packages, and all test suites with Python 3.8 semantics:
+
+```bash
+python -m pip install -e "./code[type-check]"
+python -m mypy --config-file code/pyproject.toml
+```
+
 ## Security
 
 The MVP uses OPC UA `NoSecurity` and explicitly enables unknown SFTP host-key trust in the gateway adapter. It is intended for controlled development or

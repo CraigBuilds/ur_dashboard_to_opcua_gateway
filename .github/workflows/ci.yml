@@ -50,12 +50,15 @@ jobs:
           python-version: "3.8.3"
           cache: pip
 
-      - name: Install formatting dependencies
+      - name: Install quality dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e "./packages/declarative_opcua_server"
           python -m pip install -e "./packages/universal_robots_clients"
-          python -m pip install -e "./code[format]"
+          python -m pip install -e "./code[format,type-check]"
+
+      - name: Check types
+        run: python -m mypy --config-file code/pyproject.toml
 
       - name: Check formatting
         run: |

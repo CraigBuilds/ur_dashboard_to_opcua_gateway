@@ -324,22 +324,22 @@ def create_server(
     method_folder = root.add_folder(namespace_index, "Methods")
     status_bindings: typing.List[_StatusBinding] = []
 
-    for name, reader, definition in status_definitions:
-        variant_type, default_value, python_type, is_array = definition
+    for name, reader, status_definition in status_definitions:
+        variant_type, default_value, python_type, is_array = status_definition
         initial_variant = asyncua.ua.Variant(default_value, variant_type)
         variable = status_folder.add_variable(namespace_index, name, initial_variant)
         variable.set_writable(False)
         status_bindings.append(_StatusBinding(name, variable, reader, variant_type, python_type, is_array, default_value))
 
-    for name, writer, definition in parameter_definitions:
-        variant_type, default_value, python_type, is_array = definition
+    for name, writer, parameter_definition in parameter_definitions:
+        variant_type, default_value, python_type, is_array = parameter_definition
         initial_variant = asyncua.ua.Variant(default_value, variant_type)
         variable = parameter_folder.add_variable(namespace_index, name, initial_variant)
         variable.set_writable(True)
         _install_parameter_writer(server, variable, name, writer, python_type, is_array)
 
-    for name, method, definition in method_definitions:
-        inputs, output = definition
+    for name, method, method_definition in method_definitions:
+        inputs, output = method_definition
         input_arguments = [_method_argument(argument_name, argument_definition) for argument_name, argument_definition in inputs]
         output_arguments = [] if output is None else [_method_argument("Result", output)]
         method_folder.add_method(namespace_index, name, _adapt_method(method), input_arguments, output_arguments)

@@ -19,7 +19,7 @@ Install the local distributions and development tools from the repository root:
 ```bash
 python -m pip install -e "./packages/declarative_opcua_server[test]"
 python -m pip install -e "./packages/universal_robots_clients[sftp,rtde,test]"
-python -m pip install -e "./code[sftp,test,format]"
+python -m pip install -e "./code[sftp,test,format,type-check]"
 ```
 
 Run every non-container test:
@@ -104,8 +104,19 @@ python -m black --config code/pyproject.toml --check code/src packages tests
 python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
 ```
 
+## Type checking
+
+MyPy checks all production, package-test, architecture, unit, support, and system-test modules using Python 3.8 semantics:
+
+```bash
+python -m mypy --config-file code/pyproject.toml
+```
+
+The configuration treats untyped `asyncua` and `testcontainers` APIs as explicit external boundaries. Paramiko is checked through its version-matched
+`types-paramiko` stubs. Application and package modules do not use blanket MyPy error suppressions.
+
 ## CI
 
 GitHub Actions installs all three distributions separately. Unit jobs run package, architecture, and gateway tests on Python 3.8.3 and 3.12. A Python 3.8.3
-quality job checks all Python and Markdown sources. A separate artifact job builds, checks, clean-installs, and imports both reusable package wheels with their
-optional dependencies. The Python 3.12 system job runs the Docker-backed compatibility pipeline.
+quality job checks MyPy plus all Python and Markdown formatting. A separate artifact job builds, checks, clean-installs, and imports both reusable package
+wheels with their optional dependencies. The Python 3.12 system job runs the Docker-backed compatibility pipeline.

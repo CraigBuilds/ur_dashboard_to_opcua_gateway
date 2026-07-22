@@ -149,7 +149,9 @@ def test_partial_signatures_and_supported_scalar_types_are_resolved() -> None:
         (({}, {}, {"Bad": lambda value: None}), "must annotate argument"),
     ],
 )
-def test_invalid_interface_signatures_fail_during_creation(interfaces: typing.Tuple[typing.Dict[str, typing.Callable[..., object]], ...], message: str) -> None:
+def test_invalid_interface_signatures_fail_during_creation(
+    interfaces: typing.Tuple[typing.Mapping[str, typing.Any], typing.Mapping[str, typing.Any], typing.Mapping[str, typing.Any]], message: str
+) -> None:
     """Reject functions that do not satisfy their selected interface role."""
     status_interface, parameter_interface, method_interface = interfaces
 
@@ -161,5 +163,7 @@ def test_invalid_interface_signatures_fail_during_creation(interfaces: typing.Tu
 
 def test_nested_interfaces_are_rejected() -> None:
     """Keep the package contract flat instead of interpreting nested dictionaries."""
+    status_interface = typing.cast(typing.Mapping[str, typing.Callable[[], typing.Any]], {"Nested": {"Value": lambda: 1}})
+
     with pytest.raises(TypeError, match="must be callable"):
-        declarative_opcua_server.create_server(status_interface={"Nested": {"Value": lambda: 1}}, parameter_interface={}, method_interface={})
+        declarative_opcua_server.create_server(status_interface=status_interface, parameter_interface={}, method_interface={})

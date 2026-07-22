@@ -119,6 +119,7 @@ From this package directory:
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest tests
+python -m mypy
 python -m build
 python -m twine check dist/*
 ```

@@ -143,17 +143,6 @@ code/
     Dockerfile
     pyproject.toml
     src/ur_dashboard_to_opcua_gateway/
-packages/
-    declarative_opcua_server/
-        pyproject.toml
-        README.md
-        src/declarative_opcua_server/
-        tests/
-    universal_robots_clients/
-        pyproject.toml
-        README.md
-        src/universal_robots_clients/
-        tests/
 docs/
 tests/
     architecture/
@@ -162,8 +151,8 @@ tests/
     support/
 ```
 
-Package-local tests move with reusable behavior. Gateway tests retain application policy and the Docker-backed compatibility contract across all three
-distributions.
+Package-local tests live in the two standalone package repositories. Gateway tests retain application policy and the Docker-backed compatibility contract across
+all three distributions.
 
 ## Python compatibility
 

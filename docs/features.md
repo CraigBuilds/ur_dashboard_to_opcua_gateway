@@ -164,7 +164,7 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 
 ### Reusable Python packages
 
-- Maintain the two local independently installable distributions now implemented beneath `packages/`: `declarative_opcua_server` and `universal_robots_clients`.
+- Maintain the two independently installable public distributions in their own repositories: `declarative_opcua_server` and `universal_robots_clients`.
 - Keep `declarative_opcua_server` bounded to three flat interfaces: polled status getters, client-written parameter setters, and typed methods. Do not add
   arbitrary object descriptors, nested schemas, stable NodeId configuration, or events without a concrete consumer that cannot use asyncua directly.
 - Keep the implemented source-distribution, wheel, metadata, clean-install, Python 3.8.3, Python 3.12, and URSim checks as release gates.

@@ -4,7 +4,8 @@
 
 This report considers how program invocation arguments change the gateway from a Dashboard-only robot integration into a composition of multiple robot-facing
 protocols. It defines a protocol-neutral application boundary, recommends an initial Dashboard-plus-RTDE implementation, and explains how that direction
-intersects with the two reusable distributions now staged beneath `packages/` and documented in [reusable package extraction](reusable-package-extraction.md).
+intersects with the two reusable distributions now maintained in standalone repositories and documented in
+[reusable package extraction](reusable-package-extraction.md).
 
 This is a design proposal rather than a description of current behavior. The current MVP still uses local or SFTP discovery, Dashboard control, and OPC UA
 exposure without parameterized invocations.
@@ -464,7 +465,7 @@ grant permission to stage arguments, start programs, cancel work, or stop the ro
 
 Package extraction and the multi-protocol change should continue in distinct phases:
 
-1. Publish the already built, metadata-checked, clean-installed, and system-tested packages as alpha distributions after licensing and TestPyPI validation.
+1. Publish the already built, metadata-checked, clean-installed, and system-tested packages as alpha distributions after licensing and final validation.
 1. Harden callback-failure, subscription, port-binding, Dashboard-failure, and URP-discovery contracts before promoting the packages beyond alpha.
 1. Define the protocol-neutral invocation state machine, task schema, flat naming rules, and capability boundaries inside the gateway.
 1. Build the register allocation and robot-side handshake on the implemented `ur-rtde` client in the gateway composition layer.

@@ -18,11 +18,11 @@ The gateway combines three reusable technical capabilities with product-specific
 
 | Capability                          | Owner                                                 | Status              |
 | ----------------------------------- | ----------------------------------------------------- | ------------------- |
-| Declarative OPC UA exposure         | `declarative_opcua_server`                            | Implemented locally |
-| Dashboard protocol operations       | `universal_robots_clients.dashboard_client`           | Implemented locally |
-| Discovery backend selection         | `universal_robots_clients.urp_discovery_client`       | Implemented locally |
-| Local URP discovery                 | `universal_robots_clients.urp_discovery_local_client` | Implemented locally |
-| SFTP URP discovery                  | `universal_robots_clients.urp_discovery_sftp_client`  | Implemented locally |
+| Declarative OPC UA exposure         | `declarative_opcua_server`                            | External repository |
+| Dashboard protocol operations       | `universal_robots_clients.dashboard_client`           | External repository |
+| Discovery backend selection         | `universal_robots_clients.urp_discovery_client`       | External repository |
+| Local URP discovery                 | `universal_robots_clients.urp_discovery_local_client` | External repository |
+| SFTP URP discovery                  | `universal_robots_clients.urp_discovery_sftp_client`  | External repository |
 | RTDE status, control, and registers | `universal_robots_clients.rtde_client`                | Implemented         |
 | Program invocation and task policy  | Gateway application                                   | Planned             |
 
@@ -241,29 +241,27 @@ resource has enough independent behavior to justify its own tests and lifecycle 
 
 ## Local development and release path
 
-The monorepo currently installs the package projects first:
+Clone the three repositories beside one another. Before the initial PyPI releases, install the external projects first and suppress gateway dependency
+resolution:
 
 ```bash
-python -m pip install -e ./packages/declarative_opcua_server
-python -m pip install -e "./packages/universal_robots_clients[sftp,rtde]"
-python -m pip install -e "./code[sftp,system-test]"
+python -m pip install -e ../declarative-opcua-server
+python -m pip install -e "../universal-robots-clients[sftp,rtde]"
+python -m pip install --no-deps -e "./code[sftp,system-test]"
 ```
 
-Release preparation completed in this repository includes:
+Release preparation completed in the package repositories includes:
 
 - Package-focused READMEs, examples, detailed module docstrings, changelogs, typed-package markers, bounded dependencies, and PyPI metadata.
 - Source-distribution and wheel builds, `twine check`, and clean wheel installation on Python 3.8.3 and Python 3.12 with all optional dependencies.
 - The complete non-container suites on Python 3.8.3 and Python 3.12 plus the Dashboard, SFTP, OPC UA, and RTDE URSim pipeline.
-- A CI artifact job that repeats build, metadata, clean-install, and import checks for every change.
-- A distribution-name availability check on 2026-07-21; names must be checked again immediately before upload.
+- CI jobs that repeat build, metadata, clean-install, import, and package-owned test checks for every change.
+- Real Dashboard and RTDE tests against official URSim plus local-filesystem and real OpenSSH/SFTP discovery tests in `universal-robots-clients`.
 
-The remaining extraction and release steps are:
+The remaining release steps are:
 
-1. Choose and add the intended software license.
-1. Upload the exact validated artifacts to TestPyPI with a scoped owner token and repeat clean-install smoke tests.
-1. Publish the first alpha releases to PyPI and record matching Git tags.
-1. Replace the gateway's local package installation with package-index resolution after those releases are verified.
-1. Move each package project to its own repository when independent issue tracking and release cadence justify the move, without changing import paths.
+1. Publish the exact validated artifacts to PyPI with a scoped owner token and record matching Git tags.
+1. Replace the gateway's temporary immutable GitHub-archive installation with normal package-index resolution after those releases are verified.
 1. Keep the gateway system suite as the compatibility contract between released versions and add failure-focused tests before promoting beyond alpha.
 
 Independent publication introduces versioning, changelog, CI, security, and compatibility costs. Those costs are justified only if each package remains useful

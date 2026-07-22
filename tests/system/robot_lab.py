@@ -24,35 +24,39 @@ class RobotLab:
         self._stack = contextlib.ExitStack()
         self.ursim: ursim_container.UrSimContainer
         self.sftp: openssh_container.OpenSshContainer
-        self._gateways: typing.Dict[str, gateway_container.GatewayContainer] = {}
+        self._network: tc_network.Network
+        self._gateway_image: str
 
     def start(self) -> "RobotLab":
         """Build images, start services, and expose both gateway arrangements."""
         suffix = uuid.uuid4().hex[:12]
         network_context = tc_network.Network()
-        network = self._stack.enter_context(network_context)
+        self._network = self._stack.enter_context(network_context)
         gateway_tag = f"ur_dashboard_to_opcua_gateway_test:{suffix}"
         gateway_context = tc_image.DockerImage(self.project, tag=gateway_tag, clean_up=True, dockerfile_path="code/Dockerfile")
         gateway_image = self._stack.enter_context(gateway_context)
+        self._gateway_image = str(gateway_image)
         ssh_context_path = self.repository / "tests" / "system" / "docker" / "openssh"
         ssh_tag = f"ur-program-openssh-test:{suffix}"
         ssh_context = tc_image.DockerImage(ssh_context_path, tag=ssh_tag, clean_up=True)
         ssh_image = self._stack.enter_context(ssh_context)
-        ursim_context = ursim_container.UrSimContainer(self.programs, network)
+        ursim_context = ursim_container.UrSimContainer(self.programs, self._network)
         self.ursim = self._stack.enter_context(ursim_context)
-        sftp_context = openssh_container.OpenSshContainer(str(ssh_image), self.programs, network)
+        sftp_context = openssh_container.OpenSshContainer(str(ssh_image), self.programs, self._network)
         self.sftp = self._stack.enter_context(sftp_context)
         self.ursim.prepare_robot()
-        local = gateway_container.GatewayContainer.local(str(gateway_image), self.programs, self.ursim.network_mode, self.ursim.host, self.ursim.opcua_port)
-        remote = gateway_container.GatewayContainer.sftp(str(gateway_image), network)
-        self._gateways["local"] = self._stack.enter_context(local)
-        self._gateways["sftp"] = self._stack.enter_context(remote)
 
         return self
 
     def gateway(self, catalogue: str) -> gateway_container.GatewayContainer:
-        """Return one configured gateway."""
-        return self._gateways[catalogue]
+        """Return one unstarted gateway so catalogue variants run sequentially."""
+        if catalogue == "local":
+            return gateway_container.GatewayContainer.local(self._gateway_image, self.programs, self.ursim.network_mode, self.ursim.host, self.ursim.opcua_port)
+
+        if catalogue == "sftp":
+            return gateway_container.GatewayContainer.sftp(self._gateway_image, self._network)
+
+        raise ValueError(f"Unsupported catalogue: {catalogue}")
 
     def stop(self) -> None:
         """Stop containers, remove images, and remove the private network."""

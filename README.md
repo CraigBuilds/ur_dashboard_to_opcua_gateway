@@ -88,12 +88,11 @@ documented by the [ur-rtde API](https://sdurobotics.gitlab.io/ur_rtde/api/api.ht
 .github/    GitHub Actions CI
 code/       Gateway application distribution and Dockerfile
 docs/       Architecture, features, package publication, extraction, and testing documentation
-packages/   Locally extracted reusable distributions
 tests/      Gateway architecture, unit, support, and Docker-backed system tests
 ```
 
-The two reusable projects retain independent `pyproject.toml`, `README.md`, `src/`, and `tests/` layouts and public repositories without changing their import
-packages:
+The two reusable projects have independent `pyproject.toml`, `README.md`, `src/`, and `tests/` layouts in public repositories without changing their import
+packages. They are not vendored into this repository:
 
 - [`declarative-opcua-server`](https://github.com/CraigBuilds/declarative-opcua-server) / `declarative_opcua_server`
 - [`universal-robots-clients`](https://github.com/CraigBuilds/universal-robots-clients) / `universal_robots_clients`
@@ -111,28 +110,24 @@ Dashboard/RTDE communication and OPC UA hosting live in the reusable packages.
 
 ## Install
 
-Install the local package projects before the gateway:
+After both dependencies are published on PyPI, install the gateway and its runtime dependencies in one command:
 
 ```bash
-python -m pip install -e ./packages/declarative_opcua_server
-python -m pip install -e ./packages/universal_robots_clients
 python -m pip install -e ./code
 ```
 
-Install SFTP and development dependencies:
+Until that first PyPI release, CI and the Dockerfile install immutable commits from the public package repositories. For local gateway development, clone the
+three repositories beside one another and install the two package checkouts first:
 
 ```bash
-python -m pip install -e "./packages/universal_robots_clients[sftp,rtde,test]"
-python -m pip install -e "./packages/declarative_opcua_server[test]"
-python -m pip install -e "./code[sftp,test,format]"
+python -m pip install -e "../declarative-opcua-server"
+python -m pip install -e "../universal-robots-clients[sftp,rtde]"
+python -m pip install --no-deps -e "./code[sftp,test,format,type-check]"
 ```
 
 Python 3.8.3 or later is supported. `declarative-opcua-server` selects the compatible `asyncua` 1.x line, starting at 1.1.5, on Python 3.8 and 3.9 and the 2.x
 line, starting at 2.0.1, on Python 3.10 and later. Paramiko belongs to the optional `universal-robots-clients[sftp]` extra and is imported only for SFTP
 connection setup. The optional `universal-robots-clients[rtde]` extra installs `ur-rtde`; RTDE connections are created only when its API is called.
-
-When the packages are published externally, the gateway dependency declarations can resolve them from the package index and the first two local installation
-commands will no longer be necessary.
 
 ## Run
 
@@ -169,7 +164,7 @@ change the receive rate.
 
 ## Docker
 
-The image needs all three distribution sources, so build with the repository root as context:
+Build the image with the repository root as context. During the pre-PyPI bridge, the Dockerfile installs immutable package-repository archives:
 
 ```bash
 docker build -f code/Dockerfile -t ur_dashboard_to_opcua_gateway .
@@ -190,7 +185,7 @@ the container.
 
 ## Tests
 
-Run both package projects and the gateway without Docker:
+Run the gateway tests that do not need Docker:
 
 ```bash
 python -m pytest -m "not system"
@@ -202,23 +197,23 @@ Run the complete reusable URSim pipeline on Python 3.10 or later:
 python tests/system/run.py
 ```
 
-The runner installs all three distributions into an isolated environment, builds the gateway image from the repository root, and verifies local and SFTP
-discovery, both OPC UA control styles, Dashboard execution, and RTDE-backed status/parameters against URSim. Protocol-only URSim and OpenSSH tests live in the
-[`universal-robots-clients`](https://github.com/CraigBuilds/universal-robots-clients) repository. See [testing](docs/testing.md) for focused commands and
-requirements.
+The runner installs the two external packages and the gateway into an isolated environment, builds the gateway image from the repository root, and verifies
+local and SFTP discovery, both OPC UA control styles, Dashboard execution, and RTDE-backed status/parameters against URSim. Protocol-only URSim and OpenSSH
+tests live in the [`universal-robots-clients`](https://github.com/CraigBuilds/universal-robots-clients) repository. See [testing](docs/testing.md) for focused
+commands and requirements.
 
 ## Formatting
 
 The repository uses a 160-column limit:
 
 ```bash
-python -m black --config code/pyproject.toml code/src packages tests
-python -m mdformat --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
+python -m black --config code/pyproject.toml code/src tests
+python -m mdformat --wrap 160 README.md AGENTS.md docs tests/README.md
 ```
 
 ## Type checking
 
-Run MyPy across the gateway, both reusable packages, and all test suites with Python 3.8 semantics:
+Run MyPy across the gateway and its test suites with Python 3.8 semantics:
 
 ```bash
 python -m pip install -e "./code[type-check]"

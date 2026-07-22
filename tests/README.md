@@ -21,7 +21,8 @@ the system-test runner with fakes and temporary files.
 ## System tests
 
 `system/` starts the installed gateway, URSim, and OpenSSH, then uses a real OPC UA client to verify local and SFTP configurations, Dashboard program execution,
-RTDE-backed status/parameters, and both OPC UA control styles. Direct protocol coverage remains in `universal-robots-clients`.
+RTDE-backed status/parameters, and both OPC UA control styles. The gateway variants run sequentially because they share one RTDE input-register range. Direct
+protocol coverage remains in `universal-robots-clients`.
 
 ## Layout
 

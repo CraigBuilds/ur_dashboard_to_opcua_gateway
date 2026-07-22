@@ -126,5 +126,5 @@ def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typi
 @pytest.mark.parametrize("catalogue", ["local", "sftp"])
 def test_gateway_system(robot_lab: robot_lab_module.RobotLab, expected_programs: typing.List[str], catalogue: str) -> None:
     """Run the same real system contract for local and SFTP discovery."""
-    gateway = robot_lab.gateway(catalogue)
-    verify_gateway(robot_lab, gateway.endpoint, expected_programs)
+    with robot_lab.gateway(catalogue) as gateway:
+        verify_gateway(robot_lab, gateway.endpoint, expected_programs)

@@ -19,6 +19,6 @@
 
 - Keep the gateway application compact, retain its numbered reading order, and use namespace-qualified module calls.
 - Preserve Python 3.8.3 compatibility and the configured 160-column formatting limit.
-- Treat each project beneath `packages/` as an independently installable distribution: keep its gateway dependencies at zero, put reusable behavior and tests
-  inside that project, and install the package projects before the gateway during local, CI, and container verification.
+- Treat `declarative-opcua-server` and `universal-robots-clients` as external independently installable distributions: keep reusable behavior and tests in their
+  repositories, and install those package projects before the gateway during local, CI, and container verification.
 - Keep generated caches, package metadata, build output, credentials, and local environments out of version control.

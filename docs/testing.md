@@ -16,13 +16,16 @@ Executable tests are organized by both distribution ownership and scope:
 
 ## Installation
 
-Install the local distributions and development tools from the repository root:
+Clone the three repositories beside one another. Until the package versions are available from PyPI, install the external package checkouts and then the gateway
+without dependency resolution:
 
 ```bash
-python -m pip install -e "./packages/declarative_opcua_server[test]"
-python -m pip install -e "./packages/universal_robots_clients[sftp,rtde,test]"
-python -m pip install -e "./code[sftp,test,format,type-check]"
+python -m pip install -e "../declarative-opcua-server"
+python -m pip install -e "../universal-robots-clients[sftp,rtde]"
+python -m pip install --no-deps -e "./code[sftp,test,format,type-check]"
 ```
+
+After the first PyPI releases, `python -m pip install -e "./code[sftp,test,format,type-check]"` installs all declared dependencies normally.
 
 Run every non-container test:
 
@@ -41,7 +44,7 @@ compatible asyncua 2.x line.
 
 ## Coverage
 
-The non-container tests cover:
+The standalone package repositories cover:
 
 - Declarative status polling, scalar and list values, parameter writes, typed method inputs/results, partial signatures, plain-server lifecycle, and
   flat-interface validation through a real OPC UA client.
@@ -49,6 +52,10 @@ The non-container tests cover:
 - Local and caller-owned SFTP traversal, backend selection, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
 - RTDE connection configuration, cleanup, connection health, reconnection, common telemetry, speed control, tool I/O, register ranges, typed reads, typed
   writes, validation, and rejected writes with deterministic fakes.
+- Their own build, type, format, and wheel-install contracts.
+
+The gateway non-container tests cover:
+
 - Command-line defaults, overrides, credentials, validation, and package delegation.
 - Flat per-program method naming, collision detection, generic discovery/control methods, load-before-play policy, controller methods, RTDE status, and
   parameter composition.
@@ -71,7 +78,7 @@ The runner:
 
 - Finds a supported interpreter.
 - Keeps its environment and pytest cache outside the repository.
-- Copies and installs both reusable packages and the gateway as separate distributions.
+- Installs pinned commits of both reusable packages and a copied gateway distribution.
 - Checks for Linux `amd64` Docker.
 - Pulls the pinned URSim image unless `--no-pull` is used.
 - Builds the gateway with the repository root as Docker context.
@@ -97,18 +104,19 @@ stops execution, and confirms loaded and playing state directly through URSim. D
 repository instead of being duplicated here.
 
 The local arrangement mounts programs and shares the URSim network namespace. The SFTP arrangement uses a private Docker network containing the gateway, URSim,
-and OpenSSH. The same OPC UA contract must pass in both cases.
+and OpenSSH. The same OPC UA contract must pass in both cases. The two gateway variants run sequentially against the shared lab because only one process may own
+a given URSim RTDE input-register range at a time.
 
 ## Formatting
 
 ```bash
-python -m black --config code/pyproject.toml --check code/src packages tests
-python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
+python -m black --config code/pyproject.toml --check code/src tests
+python -m mdformat --check --wrap 160 README.md AGENTS.md docs tests/README.md
 ```
 
 ## Type checking
 
-MyPy checks all production, package-test, architecture, unit, support, and system-test modules using Python 3.8 semantics:
+MyPy checks gateway production, architecture, unit, support, and system-test modules using Python 3.8 semantics:
 
 ```bash
 python -m mypy --config-file code/pyproject.toml
@@ -119,6 +127,6 @@ The configuration treats untyped `asyncua` and `testcontainers` APIs as explicit
 
 ## CI
 
-GitHub Actions installs all three distributions separately. Unit jobs run package, architecture, and gateway tests on Python 3.8.3 and 3.12. A Python 3.8.3
-quality job checks MyPy plus all Python and Markdown formatting. A separate artifact job builds, checks, clean-installs, and imports both reusable package
-wheels with their optional dependencies. The Python 3.12 system job runs the Docker-backed compatibility pipeline.
+GitHub Actions installs immutable commits of both external packages before the gateway. Unit jobs run gateway architecture and behavior tests on Python 3.8.3
+and 3.12. The quality job checks MyPy plus Python and Markdown formatting. The Python 3.12 system job runs the Docker-backed compatibility pipeline. Each
+package repository owns its own unit, quality, wheel, and real-service jobs.

@@ -47,11 +47,12 @@ The non-container tests cover:
   flat-interface validation through a real OPC UA client.
 - Dashboard line injection, greeting and response framing, endpoint forwarding, and exact named command construction.
 - Local and caller-owned SFTP traversal, backend selection, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
-- RTDE connection configuration, cleanup, connection health, reconnection, register ranges, typed reads, typed writes, and rejected writes with deterministic
-  fakes.
+- RTDE connection configuration, cleanup, connection health, reconnection, common telemetry, speed control, tool I/O, register ranges, typed reads, typed
+  writes, validation, and rejected writes with deterministic fakes.
 - Command-line defaults, overrides, credentials, validation, and package delegation.
-- Flat per-program method naming, collision detection, generic discovery/control methods, load-before-play policy, controller methods, and status composition.
-- OPC UA application identity forwarding, composition-root wiring, signal handling, and clean plain-server shutdown.
+- Flat per-program method naming, collision detection, generic discovery/control methods, load-before-play policy, controller methods, RTDE status, and
+  parameter composition.
+- OPC UA application identity forwarding, composition-root wiring, signal handling, and ordered OPC-UA/RTDE shutdown.
 - Reproducible no-motion URP fixtures and system-test runner argument handling.
 - Module docstrings, parser help, namespace imports, documented public consumers, and dataclass-only production classes.
 
@@ -90,9 +91,10 @@ Install and collect without Docker:
 python tests/system/run.py --collect-only
 ```
 
-For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, lists programs, loads and runs a selected program
-through generic methods, invokes generated program start methods, pauses and stops execution, and confirms loaded and playing state directly through URSim. A
-separate system contract connects the reusable RTDE client to the same URSim instance and exercises typed input/output register access.
+For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, checks every basic RTDE status type, changes the
+speed slider and a tool output, lists programs, loads and runs a selected program through generic methods, invokes generated program start methods, pauses and
+stops execution, and confirms loaded and playing state directly through URSim. A separate system contract connects the reusable RTDE client to the same URSim
+instance and exercises telemetry, speed, tool I/O, and typed register access.
 
 The local arrangement mounts programs and shares the URSim network namespace. The SFTP arrangement uses a private Docker network containing the gateway, URSim,
 and OpenSSH. The same OPC UA contract must pass in both cases.

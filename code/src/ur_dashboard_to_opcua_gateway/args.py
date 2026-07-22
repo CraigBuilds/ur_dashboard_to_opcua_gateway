@@ -4,7 +4,7 @@ Define and resolve all configuration accepted by ``ur_dashboard_to_opcua_gateway
 This module is the package's configuration boundary. It translates command-line options, environment values, defaults, and validation rules into one immutable
 ``Args`` dataclass so downstream modules consume resolved values rather than understanding ``argparse`` or prompting for credentials themselves. Local
 catalogues require only a program folder; SFTP catalogues additionally require a robot host and obtain the password from ``UR_ROBOT_PASSWORD`` or an interactive
-prompt. The Dashboard host defaults to the SFTP robot host when appropriate.
+prompt. The Dashboard host defaults to the SFTP robot host when appropriate, and RTDE defaults to the resolved Dashboard host unless explicitly overridden.
 
 The public API consists of ``Args``, the shared configuration value object, and ``parse_args()``, which builds and executes the parser. Parser construction,
 password acquisition, and default resolution are internal helpers.
@@ -13,6 +13,7 @@ password acquisition, and default resolution are internal helpers.
 import argparse
 import dataclasses
 import getpass
+import math
 import os
 import typing
 
@@ -23,6 +24,7 @@ _DEFAULT_SFTP_PORT = 22
 _DEFAULT_SFTP_USERNAME = "root"
 _DEFAULT_DASHBOARD_HOST = "127.0.0.1"
 _DEFAULT_DASHBOARD_PORT = 29999
+_DEFAULT_RTDE_FREQUENCY = 10.0
 _DEFAULT_OPCUA_ENDPOINT = "opc.tcp://0.0.0.0:4840/ur20/"
 _PASSWORD_VARIABLE = "UR_ROBOT_PASSWORD"
 
@@ -39,6 +41,8 @@ class Args:
     sftp_username: str = _DEFAULT_SFTP_USERNAME
     dashboard_host: str = _DEFAULT_DASHBOARD_HOST
     dashboard_port: int = _DEFAULT_DASHBOARD_PORT
+    rtde_host: typing.Optional[str] = None
+    rtde_frequency: float = _DEFAULT_RTDE_FREQUENCY
     opcua_endpoint: str = _DEFAULT_OPCUA_ENDPOINT
 
     def __post_init__(self) -> None:
@@ -55,10 +59,16 @@ class Args:
         if self.catalog == "sftp" and not self.robot_password:
             raise ValueError("Robot password is required for SFTP discovery.")
 
+        if isinstance(self.rtde_frequency, bool) or not isinstance(self.rtde_frequency, (int, float)) or not math.isfinite(self.rtde_frequency):
+            raise ValueError("RTDE frequency must be a finite number greater than zero.")
+
+        if self.rtde_frequency <= 0.0:
+            raise ValueError("RTDE frequency must be a finite number greater than zero.")
+
 
 def _create_parser() -> argparse.ArgumentParser:
     """Create the gateway command-line parser."""
-    parser = argparse.ArgumentParser(description="Expose UR programs through OPC UA.")
+    parser = argparse.ArgumentParser(description="Expose Universal Robots programs and status through OPC UA.")
     parser.add_argument("--catalog", choices=("local", "sftp"), required=True, help="Choose local filesystem or SFTP program discovery.")
     parser.add_argument("--programs-folder", default=_DEFAULT_PROGRAMS_FOLDER, help="Set the root folder searched recursively for UR program files.")
     parser.add_argument("--robot-host", help="Set the robot host used for SFTP discovery; required with --catalog sftp.")
@@ -66,6 +76,8 @@ def _create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sftp-username", default=_DEFAULT_SFTP_USERNAME, help="Set the robot SFTP username.")
     parser.add_argument("--dashboard-host", help="Set the Dashboard Server host; defaults to the robot host for SFTP or 127.0.0.1 for local discovery.")
     parser.add_argument("--dashboard-port", type=int, default=_DEFAULT_DASHBOARD_PORT, help="Set the Dashboard Server port.")
+    parser.add_argument("--rtde-host", help="Set the RTDE host; defaults to the resolved Dashboard Server host.")
+    parser.add_argument("--rtde-frequency", type=float, default=_DEFAULT_RTDE_FREQUENCY, help="Set the RTDE receive frequency in hertz (default: 10).")
     parser.add_argument("--opcua-endpoint", default=_DEFAULT_OPCUA_ENDPOINT, help="Set the OPC UA server endpoint URL.")
 
     return parser
@@ -111,5 +123,7 @@ def parse_args(arguments: typing.Optional[typing.Sequence[str]] = None) -> Args:
         sftp_username=parsed.sftp_username,
         dashboard_host=_dashboard_host(parsed),
         dashboard_port=parsed.dashboard_port,
+        rtde_host=parsed.rtde_host,
+        rtde_frequency=parsed.rtde_frequency,
         opcua_endpoint=parsed.opcua_endpoint,
     )

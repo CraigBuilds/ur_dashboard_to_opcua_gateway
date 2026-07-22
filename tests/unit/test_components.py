@@ -3,9 +3,11 @@
 import gzip
 import pathlib
 import typing
+import unittest.mock
 import xml.etree.ElementTree
 
 import pytest
+import universal_robots_clients.rtde_client as rtde_client
 import universal_robots_clients.urp_discovery_client as urp_discovery_client
 import ur_dashboard_to_opcua_gateway.main as main_module
 import ur_dashboard_to_opcua_gateway.args as parse_command_line_args
@@ -45,6 +47,7 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
     """Supply gateway identity and flat callable interfaces to the OPC UA package."""
     args = parse_command_line_args.Args(catalog="local", opcua_endpoint="opc.tcp://127.0.0.1:5000/gateway/")
     server = object()
+    client = rtde_client.Client(unittest.mock.MagicMock(), unittest.mock.MagicMock(), 42, 46)
     captured: typing.Dict[str, object] = {}
 
     def create_server(**configuration: object) -> object:
@@ -54,13 +57,35 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
         return server
 
     monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: ["Main.urp"])
+    connect = unittest.mock.MagicMock(return_value=client)
+    monkeypatch.setattr(compose_gateway.rtde_client, "connect", connect)
     monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", create_server)
 
     result = compose_gateway.compose_gateway(args)
 
-    assert result is server
-    assert set(typing.cast(typing.Dict[str, object], captured["status_interface"])) == {"ProgramState"}
-    assert captured["parameter_interface"] == {}
+    assert result.server is server
+    connect.assert_called_once_with(args.dashboard_host, frequency=10.0)
+    assert set(typing.cast(typing.Dict[str, object], captured["status_interface"])) == {
+        "ProgramState",
+        "RtdeConnected",
+        "RobotModeCode",
+        "SafetyModeCode",
+        "RuntimeStateCode",
+        "ProtectiveStopped",
+        "EmergencyStopped",
+        "TcpPose",
+        "TcpSpeed",
+        "TcpForce",
+        "JointPositions",
+        "JointTemperatures",
+        "SpeedSliderPercent",
+        "SpeedScalingPercent",
+        "GripperInput0",
+        "GripperInput1",
+        "GripperOutput0",
+        "GripperOutput1",
+    }
+    assert set(typing.cast(typing.Dict[str, object], captured["parameter_interface"])) == {"MoveSpeedPercent", "GripperOutput0", "GripperOutput1"}
     assert set(typing.cast(typing.Dict[str, object], captured["method_interface"])) == {
         "ListPrograms",
         "LoadProgram",
@@ -74,8 +99,27 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
     assert captured["root_object"] == "UR20"
 
 
+def test_composed_interfaces_pass_real_declarative_type_validation(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """Build the actual server so every bound RTDE callback annotation is validated."""
+    receiver = unittest.mock.MagicMock()
+    writer = unittest.mock.MagicMock()
+    client = rtde_client.Client(receiver, writer, 42, 46)
+    monkeypatch.setattr(compose_gateway.rtde_client, "connect", lambda *arguments, **keywords: client)
+
+    gateway = compose_gateway.compose_gateway(
+        parse_command_line_args.Args(catalog="local", programs_folder=str(tmp_path), opcua_endpoint="opc.tcp://127.0.0.1:5001/type-validation/")
+    )
+
+    try:
+        assert gateway.rtde is client
+        assert gateway.server is not None
+    finally:
+        gateway.server.tloop.stop()
+        rtde_client.disconnect(client)
+
+
 def test_main_owns_process_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Parse, compose, and run the plain asyncua server from the executable entry point."""
+    """Parse, compose, and run the resource-owning gateway from the executable entry point."""
     args = parse_command_line_args.Args(catalog="local")
     server = object()
     started: typing.List[object] = []

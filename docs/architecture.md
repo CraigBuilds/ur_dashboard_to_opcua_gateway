@@ -20,18 +20,17 @@ functions, owns its configuration, and runs the resulting server.
 ## Gateway reading order
 
 ```text
-_01_main.py
+main.py
     Parse configuration, compose the gateway, and own process startup and shutdown.
 
-_02_parse_command_line_args.py
+args.py
     Resolve command-line, environment, default, and validation rules into Args.
 
-_03_compose_gateway.py
-    Select discovery, bind Dashboard operations, build flat interfaces, and create the server.
+gateway.py
+    Select discovery, connect RTDE, bind robot operations, build flat interfaces, and compose resource lifetimes.
 ```
 
-The numeric prefixes keep the complete application reading order visible in an alphabetical listing. There are no application adapter modules between the
-composition root and the reusable packages: the package APIs are already narrow enough to call directly.
+There are no application adapter modules between the composition root and the reusable packages: the package APIs are already narrow enough to call directly.
 
 ## Package responsibilities
 
@@ -72,23 +71,24 @@ import universal_robots_clients.urp_discovery_client as urp_discovery_client
 ```
 
 `dashboard_client` owns TCP framing, validation, and named Dashboard operations. `urp_discovery_client` selects the explicit local and SFTP discovery clients;
-only `urp_discovery_sftp_client` can load optional Paramiko. `rtde_client` owns an optional `ur-rtde` connection and typed integer/double register I/O.
-Invocation schemas, register allocation, and commit/acknowledgement policy remain gateway concerns.
+only `urp_discovery_sftp_client` can load optional Paramiko. `rtde_client` owns the `ur-rtde` receive and I/O connections, common telemetry, tool digital I/O,
+speed-slider control, and typed integer/double register I/O. Invocation schemas, register allocation, and commit/acknowledgement policy remain gateway concerns.
 
 ## Dependencies
 
 ```text
-_01_main
-    +-- _02_parse_command_line_args
-    +-- _03_compose_gateway
+main
+    +-- args
+    +-- gateway
 
-_02_parse_command_line_args
+args
     +-- Python standard library only
 
-_03_compose_gateway
-    +-- _02_parse_command_line_args
+gateway
+    +-- args
     +-- declarative_opcua_server
     +-- universal_robots_clients.dashboard_client
+    +-- universal_robots_clients.rtde_client
     +-- universal_robots_clients.urp_discovery_client
 ```
 
@@ -98,40 +98,43 @@ namespaces so their owner remains visible at each call site.
 ## Runtime flow
 
 ```text
-_01_main.main()
-    -> _02_parse_command_line_args.parse_args()
-    -> _03_compose_gateway.compose_gateway(args)
+main.main()
+    -> args.parse_args()
+    -> gateway.compose_gateway(args)
         -> universal_robots_clients.urp_discovery_client.discover_programs(...)
-        -> build generic control, StartProgram_..., and ProgramState callables
+        -> universal_robots_clients.rtde_client.connect(...)
+        -> build Dashboard methods plus RTDE status and parameter callables
         -> declarative_opcua_server.create_server(...)
-    -> _01_main._run_until_stopped(server)
+        -> wrap the server and RTDE client in one gateway lifetime
+    -> main._run_until_stopped(gateway)
 ```
 
 Discovery runs once during composition to generate a flat `StartProgram_...` method for each program. The root also exposes dynamic `ListPrograms`,
 `LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram` methods. A generated start method binds the reusable Dashboard `load_and_play_program()`
-operation, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter; the declarative server
-polls it and publishes changes. The parameter interface remains empty until the RTDE invocation contract is implemented.
+operation, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter. The remaining status
+callbacks read RTDE telemetry, and parameter callbacks set the speed slider or tool outputs. The declarative server infers OPC UA types from those functions'
+annotations, polls status, and validates writes.
 
-The main module enters the plain asyncua server context and waits for `SIGINT` or `SIGTERM`. Asyncua owns server startup and shutdown; the package's daemon
-polling thread follows the lifetime of asyncua's thread loop.
+The main module enters the composed gateway context and waits for `SIGINT` or `SIGTERM`. The wrapper starts/stops asyncua first and disconnects RTDE last, which
+prevents the status thread from polling a closed RTDE client. A failed server construction or startup also closes RTDE.
 
 ## Public gateway API
 
 ```text
-_01_main
+main
     main
 
-_02_parse_command_line_args
+args
     Args
     parse_args
 
-_03_compose_gateway
+gateway
     OPC_NAMESPACE
     compose_gateway
 ```
 
-`Args` is the application's only data class. All other gateway helpers begin with an underscore because they implement composition details rather than APIs for
-other modules. Public functions document their consumers.
+`Args` is the public configuration data class. The private `_Gateway` data class only couples resource lifetimes. Other helpers begin with an underscore because
+they implement composition details rather than APIs for other modules.
 
 ## Repository layout
 

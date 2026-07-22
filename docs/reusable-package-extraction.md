@@ -2,30 +2,29 @@
 
 ## Status
 
-The first local extraction is implemented. Two independent distribution projects now live beneath `packages/`:
+The reusable package split is implemented in two public repositories:
 
-1. `declarative-opcua-server`, imported as `declarative_opcua_server`.
-1. `universal-robots-clients`, imported as `universal_robots_clients`.
+1. [`declarative-opcua-server`](https://github.com/CraigBuilds/declarative-opcua-server), imported as `declarative_opcua_server`.
+1. [`universal-robots-clients`](https://github.com/CraigBuilds/universal-robots-clients), imported as `universal_robots_clients`.
 
-Each project has its own metadata, README, `src` layout, and focused tests. The gateway declares them as dependencies and imports only their documented package
-APIs. CI and the Docker image install them as separate distributions before installing the gateway.
+Each project has its own metadata, README, `src` layout, focused tests, CI, and release workflow. The gateway declares them as dependencies and imports only
+their documented package APIs.
 
-They remain in this repository while their APIs are proven. “Extracted” currently means architecturally and distributably separate, not yet published to a
-package index or moved to external repositories.
+The gateway will install their released versions from PyPI; the system suite remains the cross-repository compatibility contract.
 
 ## Why these boundaries
 
 The gateway combines three reusable technical capabilities with product-specific policy:
 
-| Capability                         | Owner                                                 | Status              |
-| ---------------------------------- | ----------------------------------------------------- | ------------------- |
-| Declarative OPC UA exposure        | `declarative_opcua_server`                            | Implemented locally |
-| Dashboard protocol operations      | `universal_robots_clients.dashboard_client`           | Implemented locally |
-| Discovery backend selection        | `universal_robots_clients.urp_discovery_client`       | Implemented locally |
-| Local URP discovery                | `universal_robots_clients.urp_discovery_local_client` | Implemented locally |
-| SFTP URP discovery                 | `universal_robots_clients.urp_discovery_sftp_client`  | Implemented locally |
-| RTDE connection and register I/O   | `universal_robots_clients.rtde_client`                | Implemented locally |
-| Program invocation and task policy | Gateway application                                   | Planned             |
+| Capability                          | Owner                                                 | Status              |
+| ----------------------------------- | ----------------------------------------------------- | ------------------- |
+| Declarative OPC UA exposure         | `declarative_opcua_server`                            | Implemented locally |
+| Dashboard protocol operations       | `universal_robots_clients.dashboard_client`           | Implemented locally |
+| Discovery backend selection         | `universal_robots_clients.urp_discovery_client`       | Implemented locally |
+| Local URP discovery                 | `universal_robots_clients.urp_discovery_local_client` | Implemented locally |
+| SFTP URP discovery                  | `universal_robots_clients.urp_discovery_sftp_client`  | Implemented locally |
+| RTDE status, control, and registers | `universal_robots_clients.rtde_client`                | Implemented         |
+| Program invocation and task policy  | Gateway application                                   | Planned             |
 
 The two distributions do not depend on one another. The Universal Robots modules also do not import one another. Only the gateway knows that discovered programs
 become Dashboard-backed OPC UA methods.
@@ -189,6 +188,22 @@ connect
 disconnect
 is_connected
 reconnect
+read_actual_tcp_pose
+read_actual_tcp_speed
+read_actual_tcp_force
+read_actual_joint_positions
+read_joint_temperatures
+read_robot_mode
+read_safety_mode
+read_runtime_state
+is_protective_stopped
+is_emergency_stopped
+read_speed_slider_fraction
+read_speed_scaling
+write_speed_slider_fraction
+read_tool_digital_input
+read_tool_digital_output
+write_tool_digital_output
 read_output_int_register
 read_output_double_register
 write_input_int_register
@@ -197,10 +212,10 @@ write_input_double_register
 
 `Client` is a frozen data class that owns the two persistent `ur-rtde` interfaces and a lock; all behavior remains in module functions. The default upper
 register range is intended for external RTDE clients, with lower registers available explicitly. Unit tests cover configuration, lifecycle, reconnection,
-ranges, and typed reads/writes, while the system suite verifies the contract against URSim.
+telemetry, speed, tool I/O, ranges, and typed reads/writes, while the system suite verifies the contract against URSim.
 
-The package owns protocol mechanics. The gateway continues to own task schemas, register allocation, commit and acknowledgement rules, invocation serialization,
-and execution strategy. Those application-level parameter features are not implemented yet.
+The package owns protocol mechanics. The gateway continues to own OPC UA naming and units, task schemas, register allocation, commit and acknowledgement rules,
+invocation serialization, and execution strategy. Basic speed and gripper controls are implemented; atomic task invocation is not.
 
 ## Remaining gateway policy
 
@@ -214,12 +229,15 @@ The application still owns meaningful behavior:
 - Bind the reusable load-and-play operation to each generated program method.
 - Add generic list, load, run, pause, and stop methods.
 - Select which getter is published as `ProgramState`.
+- Choose OPC UA names and units for RTDE telemetry.
+- Convert the speed fraction to a percentage and label tool I/O as generic gripper signals.
+- Own the persistent RTDE client for the gateway lifetime.
 - Supply the `UR20` root, namespace, and endpoint.
 - Own process signals and the complete system test.
 
 RTDE invocation support will add product-specific task schemas, parameter mappings, and resource composition rather than moving those decisions into either
-reusable package. These current policies fit together in `_03_compose_gateway`; another application module should be introduced only when a future policy or
-long-lived resource has enough independent behavior to justify its own tests and lifecycle boundary.
+reusable package. These current policies fit together in `gateway.py`; another application module should be introduced only when a future policy or long-lived
+resource has enough independent behavior to justify its own tests and lifecycle boundary.
 
 ## Local development and release path
 

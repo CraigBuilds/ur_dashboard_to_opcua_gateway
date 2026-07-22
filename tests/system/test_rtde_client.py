@@ -15,11 +15,28 @@ import tests.system.robot_lab as robot_lab_module
 
 @pytest.mark.system
 def test_rtde_client_connects_and_exchanges_typed_registers(robot_lab: robot_lab_module.RobotLab) -> None:
-    """Connect both native interfaces and exercise real upper-range recipes."""
+    """Connect both native interfaces and exercise real telemetry, I/O, and register recipes."""
     client = rtde_client.connect(robot_lab.ursim.host, frequency=20.0)
 
     try:
         assert rtde_client.is_connected(client)
+        assert len(rtde_client.read_actual_tcp_pose(client)) == 6
+        assert len(rtde_client.read_actual_tcp_speed(client)) == 6
+        assert len(rtde_client.read_actual_tcp_force(client)) == 6
+        assert len(rtde_client.read_actual_joint_positions(client)) == 6
+        assert len(rtde_client.read_joint_temperatures(client)) == 6
+        assert type(rtde_client.read_robot_mode(client)) is int
+        assert type(rtde_client.read_safety_mode(client)) is int
+        assert type(rtde_client.read_runtime_state(client)) is int
+        assert type(rtde_client.is_protective_stopped(client)) is bool
+        assert type(rtde_client.is_emergency_stopped(client)) is bool
+        assert type(rtde_client.read_speed_slider_fraction(client)) is float
+        assert type(rtde_client.read_speed_scaling(client)) is float
+        assert type(rtde_client.read_tool_digital_input(client, 0)) is bool
+        assert type(rtde_client.read_tool_digital_output(client, 0)) is bool
+        rtde_client.write_speed_slider_fraction(client, 0.35)
+        rtde_client.write_tool_digital_output(client, 0, True)
+        rtde_client.write_tool_digital_output(client, 0, False)
         assert type(rtde_client.read_output_int_register(client, 42)) is int
         assert type(rtde_client.read_output_double_register(client, 42)) is float
         rtde_client.write_input_int_register(client, 42, 123)

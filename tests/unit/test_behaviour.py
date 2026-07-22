@@ -8,6 +8,7 @@ import unittest.mock
 
 import pytest
 import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.rtde_client as rtde_client
 import universal_robots_clients.urp_discovery_client as urp_discovery_client
 import universal_robots_clients.urp_discovery_sftp_client as urp_discovery_sftp_client
 import ur_dashboard_to_opcua_gateway.main as main_module
@@ -55,6 +56,10 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
             "dashboard.example",
             "--dashboard-port",
             "30000",
+            "--rtde-host",
+            "rtde.example",
+            "--rtde-frequency",
+            "20",
             "--opcua-endpoint",
             "opc.tcp://127.0.0.1:5000/gateway/",
         ]
@@ -67,6 +72,15 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
     assert args.sftp_username == "operator"
     assert args.dashboard_host == "dashboard.example"
     assert args.dashboard_port == 30000
+    assert args.rtde_host == "rtde.example"
+    assert args.rtde_frequency == 20.0
+
+
+@pytest.mark.parametrize("frequency", [0.0, -1.0, float("nan"), float("inf"), True])
+def test_args_reject_invalid_rtde_frequency(frequency: object) -> None:
+    """Reject RTDE receive rates that cannot configure a useful stream."""
+    with pytest.raises(ValueError, match="RTDE frequency"):
+        parse_command_line_args.Args(catalog="local", rtde_frequency=typing.cast(float, frequency))
 
 
 @pytest.mark.parametrize(
@@ -118,7 +132,30 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(dashboard_client, "pause_program", command("pause", "paused"))
     monkeypatch.setattr(dashboard_client, "stop_program", command("stop", "stopped"))
     monkeypatch.setattr(dashboard_client, "get_program_state", command("state", "STOPPED"))
-    args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
+    receiver = unittest.mock.MagicMock()
+    writer = unittest.mock.MagicMock()
+    client = rtde_client.Client(receiver, writer, 42, 46)
+    receiver.isConnected.return_value = True
+    writer.isConnected.return_value = True
+    receiver.getRobotMode.return_value = 7
+    receiver.getSafetyMode.return_value = 1
+    receiver.getRuntimeState.return_value = 2
+    receiver.isProtectiveStopped.return_value = False
+    receiver.isEmergencyStopped.return_value = False
+    receiver.getActualTCPPose.return_value = (0, 1, 2, 3, 4, 5)
+    receiver.getActualTCPSpeed.return_value = (1, 2, 3, 4, 5, 6)
+    receiver.getActualTCPForce.return_value = (2, 3, 4, 5, 6, 7)
+    receiver.getActualQ.return_value = (3, 4, 5, 6, 7, 8)
+    receiver.getJointTemperatures.return_value = (30, 31, 32, 33, 34, 35)
+    receiver.getTargetSpeedFraction.return_value = 0.8
+    receiver.getSpeedScalingCombined.return_value = 0.6
+    receiver.getDigitalInState.side_effect = lambda channel: channel == 16
+    receiver.getDigitalOutState.side_effect = lambda channel: channel == 17
+    writer.setSpeedSlider.return_value = True
+    writer.setToolDigitalOut.return_value = True
+    connect = unittest.mock.MagicMock(return_value=client)
+    monkeypatch.setattr(compose_gateway.rtde_client, "connect", connect)
+    args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000, rtde_host="rtde", rtde_frequency=20.0)
     discoveries: typing.List[typing.Tuple[object, ...]] = []
 
     def discover(
@@ -141,8 +178,9 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     compose_gateway.compose_gateway(args)
 
     status_interface = typing.cast(typing.Dict[str, typing.Callable[[], object]], captured["status_interface"])
+    parameter_interface = typing.cast(typing.Dict[str, typing.Callable[..., None]], captured["parameter_interface"])
     method_interface = typing.cast(typing.Dict[str, typing.Callable[..., object]], captured["method_interface"])
-    assert captured["parameter_interface"] == {}
+    assert set(parameter_interface) == {"MoveSpeedPercent", "GripperOutput0", "GripperOutput1"}
     assert set(method_interface) == {
         "ListPrograms",
         "LoadProgram",
@@ -153,8 +191,31 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
         "StartProgram_Production_Pick_Part",
     }
     assert inspect_signature_parameters(status_interface) == set()
+    assert inspect_required_signature_parameters(parameter_interface) == {"percent", "value"}
     assert inspect_required_signature_parameters(method_interface) == {"program"}
-    assert status_interface["ProgramState"]() == "STOPPED"
+    assert {name: reader() for name, reader in status_interface.items()} == {
+        "ProgramState": "STOPPED",
+        "RtdeConnected": True,
+        "RobotModeCode": 7,
+        "SafetyModeCode": 1,
+        "RuntimeStateCode": 2,
+        "ProtectiveStopped": False,
+        "EmergencyStopped": False,
+        "TcpPose": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+        "TcpSpeed": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        "TcpForce": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        "JointPositions": [3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        "JointTemperatures": [30.0, 31.0, 32.0, 33.0, 34.0, 35.0],
+        "SpeedSliderPercent": 80.0,
+        "SpeedScalingPercent": 60.0,
+        "GripperInput0": True,
+        "GripperInput1": False,
+        "GripperOutput0": False,
+        "GripperOutput1": True,
+    }
+    parameter_interface["MoveSpeedPercent"](40.0)
+    parameter_interface["GripperOutput0"](True)
+    parameter_interface["GripperOutput1"](False)
     assert method_interface["ListPrograms"]() == ["Main.urp", "Production/Pick Part.urp"]
     assert method_interface["LoadProgram"]("Main.urp") == "loaded"
     assert method_interface["RunProgram"]() == "played"
@@ -162,6 +223,9 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     method_interface["PauseProgram"]()
     method_interface["StopProgram"]()
     assert len(discoveries) == 2
+    connect.assert_called_once_with("rtde", frequency=20.0)
+    writer.setSpeedSlider.assert_called_once_with(0.4)
+    assert writer.setToolDigitalOut.call_args_list == [unittest.mock.call(0, True), unittest.mock.call(1, False)]
     assert calls == [
         ("state", ("robot", 30000, 5.0)),
         ("load", ("robot", "Main.urp", 30000, 5.0)),
@@ -196,9 +260,53 @@ def test_program_method_name_collisions_are_rejected(monkeypatch: pytest.MonkeyP
     """Reject distinct program paths that flatten to the same OPC UA method name."""
     args = parse_command_line_args.Args(catalog="local")
     monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: ["Pick-Part.urp", "Pick Part.urp"])
+    connect = unittest.mock.MagicMock()
+    monkeypatch.setattr(compose_gateway.rtde_client, "connect", connect)
 
     with pytest.raises(ValueError, match="duplicate"):
         compose_gateway.compose_gateway(args)
+
+    connect.assert_not_called()
+
+
+def test_gateway_closes_rtde_after_server_and_on_start_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Own the persistent RTDE connection across normal and failed OPC UA lifecycles."""
+    client = unittest.mock.MagicMock()
+    server = unittest.mock.MagicMock()
+    gateway = compose_gateway._Gateway(server, client)
+    disconnect = unittest.mock.MagicMock()
+    monkeypatch.setattr(compose_gateway.rtde_client, "disconnect", disconnect)
+
+    with gateway as entered:
+        assert entered is gateway
+        disconnect.assert_not_called()
+
+    server.__enter__.assert_called_once_with()
+    server.__exit__.assert_called_once_with(None, None, None)
+    disconnect.assert_called_once_with(client)
+
+    disconnect.reset_mock()
+    server.__enter__.side_effect = RuntimeError("port unavailable")
+
+    with pytest.raises(RuntimeError, match="port unavailable"):
+        gateway.__enter__()
+
+    disconnect.assert_called_once_with(client)
+
+
+def test_failed_server_composition_closes_rtde(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid leaking RTDE when declarative OPC UA validation or setup fails."""
+    client = unittest.mock.MagicMock()
+    disconnect = unittest.mock.MagicMock()
+    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: [])
+    monkeypatch.setattr(compose_gateway.rtde_client, "connect", lambda *arguments, **keywords: client)
+    monkeypatch.setattr(compose_gateway.rtde_client, "disconnect", disconnect)
+    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", unittest.mock.MagicMock(side_effect=RuntimeError("invalid interface")))
+
+    with pytest.raises(RuntimeError, match="invalid interface"):
+        compose_gateway.compose_gateway(parse_command_line_args.Args(catalog="local"))
+
+    disconnect.assert_called_once_with(client)
 
 
 def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pytest.MonkeyPatch) -> None:

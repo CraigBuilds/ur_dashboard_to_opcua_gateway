@@ -28,7 +28,10 @@
 - Add dynamic `ListPrograms()`, `LoadProgram(program)`, and `RunProgram()` methods for clients that need separate low-level operations.
 - Add controller-wide `PauseProgram()` and `StopProgram()` methods.
 - Poll the Dashboard program-state getter into the read-only `Status/ProgramState` variable.
-- Reserve the empty `Parameters` folder for typed RTDE-backed setters.
+- Poll RTDE connection, controller mode, safety mode, runtime state, stop flags, TCP pose/speed/force, joint position/temperature, speed, and tool I/O into
+  typed read-only status variables.
+- Write `MoveSpeedPercent` to the robot's global speed slider.
+- Treat the two tool digital inputs as portable gripper feedback and expose both tool digital outputs as writable gripper commands.
 
 ### Runtime
 
@@ -39,6 +42,7 @@
 - Create an unstarted server through the independently installable `declarative_opcua_server` package.
 - Read the SFTP password from `UR_ROBOT_PASSWORD` or an interactive prompt.
 - Keep Paramiko in the optional `universal-robots-clients[sftp]` extra and import it only for SFTP connection setup.
+- Own one persistent RTDE connection for the complete gateway lifetime and disconnect it after OPC UA status polling stops.
 - Keep process startup, `SIGINT`, `SIGTERM`, and shutdown in the main module.
 - Run as an installed command or Docker container.
 
@@ -51,7 +55,9 @@ These are accepted MVP limitations:
   controller failures to OPC UA status codes.
 - A generated start method performs load followed by play without validating the load response.
 - `ProgramState` temporarily polls Dashboard rather than RTDE, opening one connection per poll.
-- The reusable RTDE transport client is implemented, but the gateway's parameter nodes, register schema, and invocation handshake are not.
+- Basic RTDE status and direct controls are implemented, but task-specific register schemas and an atomic parameterized-program invocation handshake are not.
+- Gripper signals expose raw tool I/O. Open, closed, object-detected, and fault meanings remain deployment-specific wiring/configuration rather than a portable
+  protocol guarantee.
 - Robot operations are not serialized across concurrent OPC UA clients.
 - OPC UA uses `NoSecurity`.
 - SFTP automatically accepts unknown host keys and supports password authentication only.
@@ -150,7 +156,8 @@ The design phase must also resolve:
 - How results are represented through flat status nodes and whether a later synchronous result API is justified.
 - How schema changes affect existing clients and OPC UA node identifiers.
 
-This feature should be designed and tested as a complete invocation subsystem before adding isolated parameter setters to the current address space.
+Task arguments should be designed and tested as a complete invocation subsystem. The existing speed-slider and tool-I/O parameters are direct controller
+controls, not staged program arguments, so they do not imply atomic task invocation.
 
 See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md) for the proposed separation between Dashboard lifecycle control, RTDE or
 alternative invocation transports, protocol-neutral coordination, OPC UA exposure, and reusable package extraction.

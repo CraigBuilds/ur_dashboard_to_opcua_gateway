@@ -25,7 +25,7 @@ def child(parent: asyncua.sync.SyncNode, namespace: int, name: str) -> asyncua.s
 
 def call(parent: asyncua.sync.SyncNode, namespace: int, name: str, *arguments: object) -> object:
     """Call one OPC UA method beneath an object node."""
-    return parent.call_method(child(parent, namespace, name), *arguments) #type: ignore
+    return parent.call_method(child(parent, namespace, name), *arguments)
 
 
 def robot_node(client: asyncua.sync.Client) -> typing.Tuple[int, asyncua.sync.SyncNode]:
@@ -35,19 +35,19 @@ def robot_node(client: asyncua.sync.Client) -> typing.Tuple[int, asyncua.sync.Sy
     return namespace, child(client.nodes.objects, namespace, "UR20")
 
 
-def wait_for_status(node: asyncua.sync.SyncNode) -> str:
-    """Wait for the gateway's Dashboard-backed status poll to publish text."""
+def wait_for_status(node: asyncua.sync.SyncNode, accepts: typing.Callable[[object], bool], description: str) -> object:
+    """Wait for one gateway status poll to publish an acceptable value."""
     deadline = time.monotonic() + 10.0
 
     while time.monotonic() < deadline:
         value = node.read_value()
 
-        if isinstance(value, str) and value:
+        if accepts(value):
             return value
 
         time.sleep(0.1)
 
-    raise AssertionError("ProgramState did not receive a polled Dashboard value.")
+    raise AssertionError(f"{description} did not receive the expected polled value.")
 
 
 def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typing.List[str]) -> None:
@@ -60,8 +60,38 @@ def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typi
             methods = child(robot, namespace, "Methods")
             status = child(robot, namespace, "Status")
             parameters = child(robot, namespace, "Parameters")
-            assert parameters.get_children() == []
-            assert isinstance(wait_for_status(child(status, namespace, "ProgramState")), str)
+            parameter_names = {node.read_browse_name().Name for node in parameters.get_children()}
+            assert parameter_names == {"MoveSpeedPercent", "GripperOutput0", "GripperOutput1"}
+            assert isinstance(
+                wait_for_status(child(status, namespace, "ProgramState"), lambda value: isinstance(value, str) and bool(value), "ProgramState"), str
+            )
+            assert wait_for_status(child(status, namespace, "RtdeConnected"), lambda value: value is True, "RtdeConnected") is True
+
+            for name in ("RobotModeCode", "SafetyModeCode", "RuntimeStateCode"):
+                assert type(wait_for_status(child(status, namespace, name), lambda value: type(value) is int, name)) is int
+
+            for name in ("ProtectiveStopped", "EmergencyStopped", "GripperInput0", "GripperInput1", "GripperOutput0", "GripperOutput1"):
+                assert type(wait_for_status(child(status, namespace, name), lambda value: type(value) is bool, name)) is bool
+
+            for name in ("TcpPose", "TcpSpeed", "TcpForce", "JointPositions", "JointTemperatures"):
+                value = wait_for_status(
+                    child(status, namespace, name),
+                    lambda actual: isinstance(actual, list) and len(actual) == 6 and all(type(item) is float for item in actual),
+                    name,
+                )
+                assert isinstance(value, list)
+
+            for name in ("SpeedSliderPercent", "SpeedScalingPercent"):
+                assert type(wait_for_status(child(status, namespace, name), lambda value: type(value) is float, name)) is float
+
+            child(parameters, namespace, "MoveSpeedPercent").write_value(35.0)
+            wait_for_status(
+                child(status, namespace, "SpeedSliderPercent"), lambda value: type(value) is float and abs(value - 35.0) < 0.1, "SpeedSliderPercent"
+            )
+            child(parameters, namespace, "GripperOutput0").write_value(True)
+            wait_for_status(child(status, namespace, "GripperOutput0"), lambda value: value is True, "GripperOutput0")
+            child(parameters, namespace, "GripperOutput0").write_value(False)
+            wait_for_status(child(status, namespace, "GripperOutput0"), lambda value: value is False, "GripperOutput0")
             expected_method_names = {"StartProgram_" + "_".join(part.replace(".urp", "") for part in program.split("/")) for program in expected}
             actual_method_names = {node.read_browse_name().Name for node in methods.get_children()}
             assert expected_method_names | {"ListPrograms", "LoadProgram", "RunProgram", "PauseProgram", "StopProgram"} == actual_method_names

@@ -38,7 +38,7 @@ additions.
 ```text
 .github/    GitHub Actions CI
 code/       Gateway application distribution and Dockerfile
-docs/       Architecture, features, package extraction, and testing documentation
+docs/       Architecture, features, package publication, extraction, and testing documentation
 packages/   Locally extracted reusable distributions
 tests/      Gateway architecture, unit, support, and Docker-backed system tests
 ```
@@ -78,9 +78,9 @@ python -m pip install -e "./packages/declarative_opcua_server[test]"
 python -m pip install -e "./code[sftp,test,format]"
 ```
 
-Python 3.8.3 or later is supported. `declarative-opcua-server` selects `asyncua` 1.1.5 on Python 3.8 and 3.9 and `asyncua` 2.0.1 on Python 3.10 and later.
-Paramiko belongs to the optional `universal-robots-clients[sftp]` extra and is imported only for SFTP connection setup. The optional
-`universal-robots-clients[rtde]` extra installs `ur-rtde`; RTDE connections are created only when its API is called.
+Python 3.8.3 or later is supported. `declarative-opcua-server` selects the compatible `asyncua` 1.x line, starting at 1.1.5, on Python 3.8 and 3.9 and the 2.x
+line, starting at 2.0.1, on Python 3.10 and later. Paramiko belongs to the optional `universal-robots-clients[sftp]` extra and is imported only for SFTP
+connection setup. The optional `universal-robots-clients[rtde]` extra installs `ur-rtde`; RTDE connections are created only when its API is called.
 
 When the packages are published externally, the gateway dependency declarations can resolve them from the package index and the first two local installation
 commands will no longer be necessary.
@@ -160,7 +160,7 @@ The repository uses a 160-column limit:
 
 ```bash
 python -m black --config code/pyproject.toml code/src packages tests
-python -m mdformat --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/README.md packages/universal_robots_clients/README.md tests/README.md
+python -m mdformat --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
 ```
 
 ## Security

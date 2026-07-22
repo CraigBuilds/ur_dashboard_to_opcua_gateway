@@ -5,7 +5,7 @@
 Executable tests are organized by both distribution ownership and scope:
 
 - `packages/declarative_opcua_server/tests/` verifies the standalone OPC UA API with validation tests and a real asyncua client.
-- `packages/universal_robots_clients/tests/` verifies Dashboard framing and local/SFTP discovery with deterministic fakes.
+- `packages/universal_robots_clients/tests/` verifies Dashboard framing, selector/local/SFTP discovery, and RTDE operations with deterministic fakes.
 - `tests/architecture/` statically enforces conventions across all three distributions and their tests.
 - `tests/unit/` verifies gateway configuration, package binding, interface policy, composition, and lifecycle.
 - `tests/system/` verifies the installed distributions together with real URSim, OpenSSH, the gateway container, and an OPC UA client.
@@ -36,7 +36,8 @@ python -m pytest -c tests/pytest.ini packages/universal_robots_clients/tests
 python -m pytest -c tests/pytest.ini tests/architecture tests/unit
 ```
 
-The non-container suite supports Python 3.8.3 and later. CI runs it on Python 3.8.3 with asyncua 1.1.5 and Python 3.12 with asyncua 2.0.1.
+The non-container suite supports Python 3.8.3 and later. CI runs it on Python 3.8.3 against the compatible asyncua 1.x line and Python 3.12 against the
+compatible asyncua 2.x line.
 
 ## Coverage
 
@@ -100,10 +101,11 @@ and OpenSSH. The same OPC UA contract must pass in both cases.
 
 ```bash
 python -m black --config code/pyproject.toml --check code/src packages tests
-python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/README.md packages/universal_robots_clients/README.md tests/README.md
+python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
 ```
 
 ## CI
 
 GitHub Actions installs all three distributions separately. Unit jobs run package, architecture, and gateway tests on Python 3.8.3 and 3.12. A Python 3.8.3
-quality job checks all Python and Markdown sources, while a Python 3.12 system job runs the Docker-backed compatibility pipeline.
+quality job checks all Python and Markdown sources. A separate artifact job builds, checks, clean-installs, and imports both reusable package wheels with their
+optional dependencies. The Python 3.12 system job runs the Docker-backed compatibility pipeline.

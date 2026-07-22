@@ -7,8 +7,9 @@ import typing
 import unittest.mock
 
 import pytest
-import universal_robots_clients.dashboard as dashboard
-import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.urp_discovery_client as urp_discovery_client
+import universal_robots_clients.urp_discovery_sftp_client as urp_discovery_sftp_client
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
@@ -79,12 +80,12 @@ def test_sftp_discovery_delegates_resolved_configuration(monkeypatch: pytest.Mon
     """Pass application configuration into the reusable SFTP discovery package."""
     discover = unittest.mock.MagicMock(return_value=["Main.urp"])
 
-    monkeypatch.setattr(program_discovery, "discover_programs_over_sftp", discover)
+    monkeypatch.setattr(urp_discovery_client.urp_discovery_sftp_client, "connect_and_discover_programs", discover)
 
-    assert program_discovery.discover_programs(
+    assert urp_discovery_client.discover_programs(
         "sftp", "/robot/programs", host="robot", username="operator", password="secret", port=2222, trust_unknown_host_keys=True
     ) == ["Main.urp"]
-    discover.assert_called_once_with("robot", "/robot/programs", "operator", "secret", 2222, program_discovery.DEFAULT_SFTP_TIMEOUT, True)
+    discover.assert_called_once_with("robot", "/robot/programs", "operator", "secret", 2222, urp_discovery_sftp_client.DEFAULT_TIMEOUT, True)
 
 
 def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,11 +106,11 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
 
         return run
 
-    monkeypatch.setattr(dashboard, "load_program", load)
-    monkeypatch.setattr(dashboard, "play_program", command("play", "played"))
-    monkeypatch.setattr(dashboard, "pause_program", command("pause", "paused"))
-    monkeypatch.setattr(dashboard, "stop_program", command("stop", "stopped"))
-    monkeypatch.setattr(dashboard, "get_program_state", command("state", "STOPPED"))
+    monkeypatch.setattr(dashboard_client, "load_program", load)
+    monkeypatch.setattr(dashboard_client, "play_program", command("play", "played"))
+    monkeypatch.setattr(dashboard_client, "pause_program", command("pause", "paused"))
+    monkeypatch.setattr(dashboard_client, "stop_program", command("stop", "stopped"))
+    monkeypatch.setattr(dashboard_client, "get_program_state", command("state", "STOPPED"))
     args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
     discoveries: typing.List[typing.Tuple[object, ...]] = []
 
@@ -120,14 +121,14 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
         username: str,
         password: typing.Optional[str],
         port: int,
-        timeout: float,
-        trust_unknown_host_keys: bool,
+        timeout: float = 5.0,
+        trust_unknown_host_keys: bool = False,
     ) -> typing.List[str]:
         discoveries.append((backend, root, host, username, password, port, timeout, trust_unknown_host_keys))
 
         return ["Main.urp", "Production/Pick Part.urp"]
 
-    monkeypatch.setattr(compose_gateway.program_discovery, "discover_programs", discover)
+    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", discover)
     monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or object())
 
     compose_gateway.compose_gateway(args)
@@ -187,7 +188,7 @@ def inspect_required_signature_parameters(interface: typing.Mapping[str, typing.
 def test_program_method_name_collisions_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reject distinct program paths that flatten to the same OPC UA method name."""
     args = parse_command_line_args.Args(catalog="local")
-    monkeypatch.setattr(compose_gateway.program_discovery, "discover_programs", lambda *arguments: ["Pick-Part.urp", "Pick Part.urp"])
+    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: ["Pick-Part.urp", "Pick Part.urp"])
 
     with pytest.raises(ValueError, match="duplicate"):
         compose_gateway.compose_gateway(args)

@@ -9,8 +9,8 @@ Function annotations are part of the runtime contract. A small internal map supp
 homogeneous one-dimensional ``typing.List`` values of those types. Unsupported, unresolved, or contextually invalid signatures fail while the server is being
 created rather than producing a malformed address space later.
 
-This internal module depends on ``asyncua`` plus standard-library inspection, threading, typing, logging, and dataclass support. Only the package root re-exports
-``create_server()``; binding records, type resolution, polling, and callback wrappers remain private.
+This implementation module depends on ``asyncua`` plus standard-library inspection, threading, typing, logging, and dataclass support. The package root
+re-exports ``create_server()``; binding records, type resolution, polling, and callback wrappers remain private.
 """
 
 import copy

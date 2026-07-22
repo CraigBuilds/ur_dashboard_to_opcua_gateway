@@ -17,13 +17,15 @@ package index or moved to external repositories.
 
 The gateway combines three reusable technical capabilities with product-specific policy:
 
-| Capability                         | Owner                                        | Status              |
-| ---------------------------------- | -------------------------------------------- | ------------------- |
-| Declarative OPC UA exposure        | `declarative_opcua_server`                   | Implemented locally |
-| Dashboard protocol operations      | `universal_robots_clients.dashboard`         | Implemented locally |
-| Local and SFTP URP discovery       | `universal_robots_clients.program_discovery` | Implemented locally |
-| RTDE connection and register I/O   | `universal_robots_clients.rtde`              | Implemented locally |
-| Program invocation and task policy | Gateway application                          | Planned             |
+| Capability                         | Owner                                                 | Status              |
+| ---------------------------------- | ----------------------------------------------------- | ------------------- |
+| Declarative OPC UA exposure        | `declarative_opcua_server`                            | Implemented locally |
+| Dashboard protocol operations      | `universal_robots_clients.dashboard_client`           | Implemented locally |
+| Discovery backend selection        | `universal_robots_clients.urp_discovery_client`       | Implemented locally |
+| Local URP discovery                | `universal_robots_clients.urp_discovery_local_client` | Implemented locally |
+| SFTP URP discovery                 | `universal_robots_clients.urp_discovery_sftp_client`  | Implemented locally |
+| RTDE connection and register I/O   | `universal_robots_clients.rtde_client`                | Implemented locally |
+| Program invocation and task policy | Gateway application                                   | Planned             |
 
 The two distributions do not depend on one another. The Universal Robots modules also do not import one another. Only the gateway knows that discovered programs
 become Dashboard-backed OPC UA methods.
@@ -119,11 +121,11 @@ Applications requiring arbitrary address spaces should use asyncua directly. Thi
 ### Current verification
 
 Package tests use a real asyncua client to browse all three folders, observe polled scalar and list status values, write a parameter, invoke a method, and stop
-cleanly. They also verify partial signatures, invalid signatures, and rejection of nested interfaces. The same tests pass on Python 3.8.3 with asyncua 1.1.5 and
-Python 3.12 with asyncua 2.0.1.
+cleanly. They also verify partial signatures, invalid signatures, and rejection of nested interfaces. The same tests pass on Python 3.8.3 against the compatible
+asyncua 1.x line and Python 3.12 against the compatible asyncua 2.x line.
 
-Before external publication, add focused tests for getter failures, setter failures and client status codes, duplicate or invalid names, port binding failures,
-status subscription notifications, package builds, and installation into a clean environment.
+Publication hardening now includes package builds, metadata checks, and clean-environment installation. Further reliability releases should add focused tests
+for getter failures, setter failures and client status codes, duplicate or invalid names, port binding failures, and status subscription notifications.
 
 ## universal-robots-clients
 
@@ -132,14 +134,17 @@ status subscription notifications, package builds, and installation into a clean
 Consumers import capability modules explicitly:
 
 ```python
-import universal_robots_clients.dashboard as dashboard
-import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.rtde_client as rtde_client
+import universal_robots_clients.urp_discovery_client as urp_discovery_client
+import universal_robots_clients.urp_discovery_local_client as urp_discovery_local_client
+import universal_robots_clients.urp_discovery_sftp_client as urp_discovery_sftp_client
 ```
 
-The root package re-exports nothing. Calls therefore retain ownership context such as `dashboard.play_program()` and
-`program_discovery.discover_local_programs()`.
+The root package re-exports nothing. Calls therefore retain ownership context such as `dashboard_client.play_program()` and
+`urp_discovery_local_client.discover_programs()`.
 
-### Dashboard module
+### Dashboard client
 
 The public API is:
 
@@ -160,27 +165,23 @@ load response yet.
 
 The module knows nothing about `Args`, discovery, RTDE, OPC UA, program method naming, or process lifecycle.
 
-### Program-discovery module
+### URP discovery clients
 
-The public API is:
+The selector client exposes:
 
 ```text
 discover_programs
-discover_local_programs
-discover_sftp_programs
-discover_programs_over_sftp
 ```
 
-Both traversal paths find case-insensitive `.urp` files recursively, normalize relative paths, and sort results. `discover_programs()` selects local or SFTP
-operation from one backend argument, allowing configured applications to call the package directly. The lowest-level SFTP function accepts a caller-owned
-connected client. The connection convenience function owns a short Paramiko connection and requires unknown-host-key trust to be selected explicitly. Paramiko
-belongs to the optional `sftp` extra and is imported only by that convenience function.
+`urp_discovery_local_client.discover_programs()` performs local traversal. `urp_discovery_sftp_client.discover_programs()` accepts a caller-owned connected SFTP
+client, while `connect_and_discover_programs()` owns a short Paramiko connection. All paths find case-insensitive `.urp` files recursively, normalize relative
+paths, and sort results. Paramiko belongs to the optional `sftp` extra and is imported only by the managed SFTP connection operation.
 
 The gateway remains responsible for environment-variable passwords, prompts, and its current decision to trust unknown keys.
 
-### RTDE module
+### RTDE client
 
-The implemented `universal_robots_clients.rtde` module loads the optional `ur-rtde` dependency only when connecting. Its public functional API is:
+The implemented `universal_robots_clients.rtde_client` module loads the optional `ur-rtde` dependency only when connecting. Its public functional API is:
 
 ```text
 Client
@@ -230,15 +231,22 @@ python -m pip install -e "./packages/universal_robots_clients[sftp,rtde]"
 python -m pip install -e "./code[sftp,system-test]"
 ```
 
-The next extraction steps are:
+Release preparation completed in this repository includes:
 
-1. Complete each package's remaining failure and build contracts.
-1. Build wheels and source distributions and install them in clean test environments.
-1. Run the gateway's Python 3.8, Python 3.12, and URSim suites against those artifacts.
-1. Check distribution and repository names immediately before publication.
-1. Move each package project to its own repository without changing import paths.
-1. Publish bounded releases and replace local development installation with package-index resolution.
-1. Keep the gateway system suite as the compatibility contract between released versions.
+- Package-focused READMEs, examples, detailed module docstrings, changelogs, typed-package markers, bounded dependencies, and PyPI metadata.
+- Source-distribution and wheel builds, `twine check`, and clean wheel installation on Python 3.8.3 and Python 3.12 with all optional dependencies.
+- The complete non-container suites on Python 3.8.3 and Python 3.12 plus the Dashboard, SFTP, OPC UA, and RTDE URSim pipeline.
+- A CI artifact job that repeats build, metadata, clean-install, and import checks for every change.
+- A distribution-name availability check on 2026-07-21; names must be checked again immediately before upload.
+
+The remaining extraction and release steps are:
+
+1. Choose and add the intended software license.
+1. Upload the exact validated artifacts to TestPyPI with a scoped owner token and repeat clean-install smoke tests.
+1. Publish the first alpha releases to PyPI and record matching Git tags.
+1. Replace the gateway's local package installation with package-index resolution after those releases are verified.
+1. Move each package project to its own repository when independent issue tracking and release cadence justify the move, without changing import paths.
+1. Keep the gateway system suite as the compatibility contract between released versions and add failure-focused tests before promoting beyond alpha.
 
 Independent publication introduces versioning, changelog, CI, security, and compatibility costs. Those costs are justified only if each package remains useful
 without the gateway, which the current boundaries now demonstrate.

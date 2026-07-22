@@ -1,0 +1,3 @@
+include CHANGELOG.md
+include README.md
+include src/declarative_opcua_server/py.typed

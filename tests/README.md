@@ -7,10 +7,13 @@ system contract.
 
 ```text
 packages/declarative_opcua_server/tests/  Real-client OPC UA API and validation tests
-packages/universal_robots_clients/tests/  Dashboard, discovery, and RTDE tests
+packages/universal_robots_clients/tests/  Dashboard, selector/local/SFTP discovery, and RTDE tests
 ```
 
 Both are collected by `tests/pytest.ini` so one command runs the complete non-container contract.
+
+CI also builds both packages as source distributions and wheels, validates their metadata and README rendering, then imports every public module from a fresh
+wheel installation.
 
 ## Architecture tests
 

@@ -8,6 +8,7 @@ import typing
 
 import asyncua.sync
 import declarative_opcua_server
+import declarative_opcua_server.server as server_module
 import pytest
 
 
@@ -109,6 +110,11 @@ def test_interfaces_work_through_a_real_opcua_client() -> None:
     assert state["height"] == 125
     assert state["started"] is True
     assert state["loaded"] == "Main.urp"
+
+
+def test_package_root_reexports_server_module_operation() -> None:
+    """Keep the concise package-root API backed by the clearly named server module."""
+    assert declarative_opcua_server.create_server is server_module.create_server
 
 
 def test_partial_signatures_and_supported_scalar_types_are_resolved() -> None:

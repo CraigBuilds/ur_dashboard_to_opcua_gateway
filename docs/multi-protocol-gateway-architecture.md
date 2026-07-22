@@ -285,25 +285,28 @@ basic RTDE register access are implemented through direct package APIs. The decl
 setters. The remaining extraction work is invocation design, release hardening, and external publication, not another gateway-module move.
 
 - `declarative_opcua_server` owns the fixed callable-to-OPC-UA adapter.
-- `universal_robots_clients.dashboard` owns lifecycle protocol functions.
-- `universal_robots_clients.program_discovery` owns filesystem and SFTP catalogue traversal.
-- `universal_robots_clients.rtde` owns reusable RTDE connection and register access without owning invocation workflow.
+- `universal_robots_clients.dashboard_client` owns lifecycle protocol functions.
+- `universal_robots_clients.urp_discovery_client` selects the local and SFTP catalogue clients.
+- `universal_robots_clients.urp_discovery_local_client` owns filesystem traversal.
+- `universal_robots_clients.urp_discovery_sftp_client` owns SFTP traversal and optional Paramiko connection setup.
+- `universal_robots_clients.rtde_client` owns reusable RTDE connection and register access without owning invocation workflow.
 
-### Dashboard module
+### Dashboard client
 
-The implemented Dashboard module is a standalone capability within `universal_robots_clients`. It exposes protocol-accurate operations including
+The implemented Dashboard client is a standalone capability within `universal_robots_clients`. It exposes protocol-accurate operations including
 `load_program()`, `play_program()`, `load_and_play_program()`, `pause_program()`, `stop_program()`, and `get_program_state()`. The gateway binds those
 operations directly into its OPC UA interface and can combine them with RTDE-backed behavior.
 
 The module does not depend on RTDE, invocation schemas, OPC UA, or program discovery. This preserves its value for scripts and projects that need only the
 Dashboard Server.
 
-### Program-discovery module
+### URP discovery clients
 
-The implemented program-discovery module remains cleanly reusable. It lists UR program files but does not decide how a task is invoked. A companion task
+The selector, local, and SFTP discovery clients remain cleanly reusable. They list UR program files but do not decide how a task is invoked. A companion task
 manifest may refer to discovered programs, but manifest interpretation and execution strategy belong to the gateway until a broader reusable use case appears.
 
-The `program_discovery` module does not depend on Dashboard, RTDE, or OPC UA. Paramiko remains an optional SFTP extra so local discovery does not require it.
+Only `urp_discovery_sftp_client` can import optional Paramiko. The selector and local clients remain importable without SFTP dependencies, and none of the three
+depends on Dashboard, RTDE, or OPC UA.
 
 ### OPC UA package scope
 
@@ -320,9 +323,9 @@ mappings, arbitrary folders, stable NodeIds, or event schemas. The gateway trans
 This boundary is intentionally less flexible than the earlier descriptor proposal. Applications needing arbitrary OPC UA address spaces should use asyncua
 directly rather than expanding this package into a general framework.
 
-### RTDE module
+### RTDE client
 
-Reusable RTDE protocol access is implemented in `universal_robots_clients.rtde` rather than a separate distribution:
+Reusable RTDE protocol access is implemented in `universal_robots_clients.rtde_client` rather than a separate distribution:
 
 ```text
 Responsibilities:
@@ -357,12 +360,12 @@ as a separate library.
 
 ```mermaid
 flowchart TD
-    Gateway["ur_robot_to_opcua_gateway"] --> OpcPackage["declarative_opcua_server"]
+    Gateway["ur_dashboard_to_opcua_gateway"] --> OpcPackage["declarative_opcua_server"]
     Gateway --> UrClients["universal_robots_clients"]
 
-    UrClients --> DashboardModule["dashboard module"]
-    UrClients --> ProgramDiscoveryModule["program_discovery module"]
-    UrClients --> RtdeModule["rtde module"]
+    UrClients --> DashboardModule["dashboard_client"]
+    UrClients --> ProgramDiscoveryModule["URP discovery clients"]
+    UrClients --> RtdeModule["rtde_client"]
 
     OpcPackage --> AsyncUa["asyncua"]
     ProgramDiscoveryModule --> Paramiko["paramiko optional SFTP extra"]
@@ -417,9 +420,9 @@ application rather than move into any protocol package.
 
 Each extracted package owns protocol-focused tests:
 
-- `universal_robots_clients.dashboard`: framing, command construction, responses, timeouts, and connection failures.
-- `universal_robots_clients.program_discovery`: local and SFTP traversal, filtering, normalization, optional dependencies, and errors.
-- `universal_robots_clients.rtde`: recipes, register codecs, handshake transitions, ownership, disconnects, and reconnects.
+- `universal_robots_clients.dashboard_client`: framing, command construction, responses, timeouts, and connection failures.
+- `universal_robots_clients.urp_discovery_*`: backend selection, traversal, filtering, normalization, optional dependencies, and errors.
+- `universal_robots_clients.rtde_client`: recipes, register codecs, handshake transitions, ownership, disconnects, and reconnects.
 - `declarative_opcua_server`: flat-interface validation, Python-to-UA types, status polling, parameter writes, method calls, namespaces, lifecycle, failure
   statuses, security defaults, real-client contracts, and clean installation from built distributions.
 
@@ -459,14 +462,13 @@ grant permission to stage arguments, start programs, cancel work, or stop the ro
 
 Package extraction and the multi-protocol change should continue in distinct phases:
 
-1. Harden the locally implemented `declarative_opcua_server` callback-failure, subscription, port-binding, artifact-build, and clean-install contracts.
-1. Harden the locally implemented Dashboard and program-discovery package contracts and run the complete gateway suite against built artifacts.
-1. Publish both distributions externally without changing their import packages or the gateway's composition model.
+1. Publish the already built, metadata-checked, clean-installed, and system-tested packages as alpha distributions after licensing and TestPyPI validation.
+1. Harden callback-failure, subscription, port-binding, Dashboard-failure, and URP-discovery contracts before promoting the packages beyond alpha.
 1. Define the protocol-neutral invocation state machine, task schema, flat naming rules, and capability boundaries inside the gateway.
 1. Build the register allocation and robot-side handshake on the implemented `ur-rtde` client in the gateway composition layer.
 1. Generate flat status getters and parameter setters from the task schema and supply them to `declarative_opcua_server`.
 1. Add real URSim tests for parameters, commit, acknowledgement, failures, and both execution strategies.
-1. Expand `universal_robots_clients.rtde` only for protocol mechanics proven reusable by the gateway; retain task and workflow policy in the application.
+1. Expand `universal_robots_clients.rtde_client` only for protocol mechanics proven reusable by the gateway; retain task and workflow policy in the application.
 1. Rename the gateway after the second robot-facing protocol becomes a supported end-to-end capability.
 
 The flat OPC UA package does not need the final task catalogue before publication. It owns callable adaptation and resource lifecycle; the gateway owns what the
@@ -499,15 +501,15 @@ the gateway product.
   whether the package is extracted first.
 - Whether the first invocation release can remain within flat status, parameter, and method functions or proves a narrowly defined package extension necessary.
 - The point at which the gateway and repository are renamed.
-- The evidence required before expanding `universal_robots_clients.rtde` beyond typed connection and register operations.
+- The evidence required before expanding `universal_robots_clients.rtde_client` beyond typed connection and register operations.
 
 ## Recommendation
 
 Keep the locally extracted `declarative_opcua_server` and `universal_robots_clients` distributions bounded to their implemented APIs, harden them, and publish
 them without restoring application adapter modules. The compact gateway composition root should retain task schemas and invocation coordination.
 
-Prototype Dashboard-plus-RTDE invocation behavior in the gateway using the existing `universal_robots_clients.rtde` transport functions. Expand that module only
-with proven reusable protocol mechanics, while leaving invocation policy in the application.
+Prototype Dashboard-plus-RTDE invocation behavior in the gateway using the existing `universal_robots_clients.rtde_client` transport functions. Expand that
+module only with proven reusable protocol mechanics, while leaving invocation policy in the application.
 
 This approach keeps the current package boundaries, avoids coupling OPC UA clients to robot protocol details, and lets the product grow from a Dashboard bridge
 into a general UR robot integration gateway without turning every application decision into a module or package prematurely.

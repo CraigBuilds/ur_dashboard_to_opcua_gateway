@@ -7,7 +7,7 @@ import typing
 
 import testcontainers.core.container as tc_container
 import testcontainers.core.network as tc_network
-import universal_robots_clients.dashboard as dashboard
+import universal_robots_clients.dashboard_client as dashboard_client
 
 import tests.support.waiting as waiting
 
@@ -91,7 +91,7 @@ class UrSimContainer:
 
     def command(self, command: str) -> str:
         """Send a real Dashboard command."""
-        return dashboard.send_command(self.host, command, self.dashboard_port)
+        return dashboard_client.send_command(self.host, command, self.dashboard_port)
 
     def prepare_robot(self) -> None:
         """Prepare URSim to execute the safe test program."""

@@ -160,10 +160,11 @@ alternative invocation transports, protocol-neutral coordination, OPC UA exposur
 - Maintain the two local independently installable distributions now implemented beneath `packages/`: `declarative_opcua_server` and `universal_robots_clients`.
 - Keep `declarative_opcua_server` bounded to three flat interfaces: polled status getters, client-written parameter setters, and typed methods. Do not add
   arbitrary object descriptors, nested schemas, stable NodeId configuration, or events without a concrete consumer that cannot use asyncua directly.
-- Complete callback-failure, port-binding, subscription, build-artifact, and clean-install tests before publishing externally.
+- Keep the implemented source-distribution, wheel, metadata, clean-install, Python 3.8.3, Python 3.12, and URSim checks as release gates.
+- Add focused callback-failure, port-binding, and subscription tests before promoting the packages beyond their initial alpha status.
 - Keep robot task schemas, invocation identifiers, staged and active values, RTDE mappings, and execution policy in this gateway. Add another OPC UA capability
   later only if the implemented invocation model demonstrates that flat status, parameter, and method functions are insufficient.
-- Keep the implemented Dashboard, program-discovery, and RTDE modules independent. Keep task schemas, register allocation, commit and acknowledgement logic, and
+- Keep the Dashboard, three URP-discovery, and RTDE client modules focused. Keep task schemas, register allocation, commit and acknowledgement logic, and
   invocation policy in the gateway rather than the package.
 - Decouple each package from gateway `Args`, UR20-specific OPC UA names, application command dictionaries, shortcut policy, password prompting, and process
   lifecycle.
@@ -210,7 +211,7 @@ See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md
 
 ### Third-party robot libraries
 
-- Reconsider `python-urx` and other maintained Universal Robots libraries before expanding the robot-integration surface. The RTDE module currently uses
+- Reconsider `python-urx` and other maintained Universal Robots libraries before expanding the robot-integration surface. `rtde_client` currently uses
   `ur-rtde`; continue evaluating its maintenance, compatibility, and operational behavior as the invocation design develops.
 - Revisit this decision when the gateway needs persistent connection management, richer robot state, RTDE data, URScript operations, or control beyond the
   Dashboard Server.
@@ -218,13 +219,13 @@ See [multi-protocol gateway architecture](multi-protocol-gateway-architecture.md
   robot and PolyScope versions.
 - Before adoption, assess maintenance activity, licensing, Python 3.8.3 support, native or container dependencies, API stability, security history, and fit with
   the gateway's small qualified package APIs.
-- Keep the direct socket implementation inside `universal_robots_clients.dashboard` while the MVP only needs a small set of line-oriented commands, because a
-  broader robot library would currently add dependency and architectural complexity without replacing much code.
+- Keep the direct socket implementation inside `universal_robots_clients.dashboard_client` while the MVP only needs a small set of line-oriented commands,
+  because a broader robot library would currently add dependency and architectural complexity without replacing much code.
 
 ### Implementation decisions to reconsider
 
-- Reconsider replacing the function-local Paramiko import in `universal_robots_clients.program_discovery` with a top-level namespace import only if SFTP becomes
-  mandatory for every package consumer. The current import keeps local discovery available without SSH dependencies.
+- Reconsider replacing the function-local Paramiko import in `universal_robots_clients.urp_discovery_sftp_client` with a top-level namespace import only if SFTP
+  becomes mandatory for every package consumer. The current import keeps selector and local discovery imports available without SSH dependencies.
 - Reconsider maintaining a persistent Dashboard connection, connection pool, or stateful Dashboard session if command frequency, connection latency, or
   multi-command operations justify it. The MVP deliberately opens one connection per command because this is stateless, isolates failed exchanges, and avoids
   connection ownership, locking, stale-session detection, reconnection, and shutdown lifecycle concerns. Any persistent design should define serialization,

@@ -66,13 +66,14 @@ schemas, or process signals.
 The root package re-exports nothing. Consumers retain protocol context in every call:
 
 ```python
-import universal_robots_clients.dashboard as dashboard
-import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.rtde_client as rtde_client
+import universal_robots_clients.urp_discovery_client as urp_discovery_client
 ```
 
-`dashboard` owns TCP framing, validation, and named Dashboard operations. `program_discovery` owns backend selection, local and caller-owned SFTP traversal,
-plus an optional Paramiko connection convenience function. `rtde` owns an optional `ur-rtde` connection and typed integer/double register I/O. The modules do
-not import one another. Invocation schemas, register allocation, and commit/acknowledgement policy remain gateway concerns.
+`dashboard_client` owns TCP framing, validation, and named Dashboard operations. `urp_discovery_client` selects the explicit local and SFTP discovery clients;
+only `urp_discovery_sftp_client` can load optional Paramiko. `rtde_client` owns an optional `ur-rtde` connection and typed integer/double register I/O.
+Invocation schemas, register allocation, and commit/acknowledgement policy remain gateway concerns.
 
 ## Dependencies
 
@@ -87,8 +88,8 @@ _02_parse_command_line_args
 _03_compose_gateway
     +-- _02_parse_command_line_args
     +-- declarative_opcua_server
-    +-- universal_robots_clients.dashboard
-    +-- universal_robots_clients.program_discovery
+    +-- universal_robots_clients.dashboard_client
+    +-- universal_robots_clients.urp_discovery_client
 ```
 
 The graph is acyclic. The extracted packages accept ordinary values and callables and never import the gateway's `Args`. Cross-module calls retain module
@@ -100,7 +101,7 @@ namespaces so their owner remains visible at each call site.
 _01_main.main()
     -> _02_parse_command_line_args.parse_args()
     -> _03_compose_gateway.compose_gateway(args)
-        -> universal_robots_clients.program_discovery.*
+        -> universal_robots_clients.urp_discovery_client.discover_programs(...)
         -> build generic control, StartProgram_..., and ProgramState callables
         -> declarative_opcua_server.create_server(...)
     -> _01_main._run_until_stopped(server)
@@ -163,6 +164,6 @@ distributions.
 
 ## Python compatibility
 
-All distributions support Python 3.8.3 and later. Runtime annotations use Python 3.8-compatible `typing` forms. `declarative-opcua-server` selects asyncua 1.1.5
-for Python below 3.10 and asyncua 2.0.1 for newer interpreters. CI runs non-container tests on Python 3.8.3 and 3.12 and runs the real container pipeline on
-Python 3.12.
+All distributions support Python 3.8.3 and later. Runtime annotations use Python 3.8-compatible `typing` forms. `declarative-opcua-server` selects the asyncua
+1.x line from 1.1.5 for Python below 3.10 and the 2.x line from 2.0.1 for newer interpreters. CI runs non-container tests on Python 3.8.3 and 3.12 and runs the
+real container pipeline on Python 3.12.

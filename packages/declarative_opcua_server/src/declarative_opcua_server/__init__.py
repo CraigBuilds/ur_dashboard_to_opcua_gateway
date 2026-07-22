@@ -11,8 +11,8 @@ folders, objects, node identifiers, security schemes, robot protocols, or applic
 This package depends on ``asyncua`` and the Python standard library. It has no knowledge of Universal Robots or the gateway that first motivated it.
 """
 
-import declarative_opcua_server._server as _server
+import declarative_opcua_server.server as server
 
 __all__ = ["create_server"]
 
-create_server = _server.create_server
+create_server = server.create_server

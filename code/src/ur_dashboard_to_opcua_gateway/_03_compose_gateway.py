@@ -8,8 +8,8 @@ flat OPC UA method names, and defines the gateway's fixed namespace and robot ob
 clients and the system tests use it to resolve the application namespace. Generated method names are the only private application policy; backend selection
 and protocol operations are supplied directly by reusable package functions.
 
-The module depends on ``_02_parse_command_line_args``, ``declarative_opcua_server``, and the ``dashboard`` and ``program_discovery`` modules from
-``universal_robots_clients``. The reusable packages remain independent of this gateway and of one another.
+The module depends on ``_02_parse_command_line_args``, ``declarative_opcua_server``, and the ``dashboard_client`` and ``urp_discovery_client`` modules from
+``universal_robots_clients``. The reusable packages remain independent of this gateway; the discovery selector depends only on its two focused backends.
 """
 
 import functools
@@ -18,8 +18,8 @@ import re
 import typing
 
 import declarative_opcua_server
-import universal_robots_clients.dashboard as dashboard
-import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.urp_discovery_client as urp_discovery_client
 
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 
@@ -43,37 +43,37 @@ def _program_method_name(program: str) -> str:
 
 
 def compose_gateway(args: parse_command_line_args.Args) -> typing.Any:
-    """Compose the configured gateway server.
+    """Compose package operations into the configured gateway server.
 
-    Used by ``_01_main.main()``.
+    Used by ``_01_main.main()`` between argument parsing and process lifecycle management.
     """
+    # Reuse one configured callable for startup method generation and the live ListPrograms method.
     discover_programs = functools.partial(
-        program_discovery.discover_programs,
+        urp_discovery_client.discover_programs,
         args.catalog,
         args.programs_folder,
-        args.robot_host,
-        args.sftp_username,
-        args.robot_password,
-        args.sftp_port,
-        program_discovery.DEFAULT_SFTP_TIMEOUT,
-        True,
+        host=args.robot_host,
+        username=args.sftp_username,
+        password=args.robot_password,
+        port=args.sftp_port,
+        trust_unknown_host_keys=True,
     )
     programs = discover_programs()
     if len({_program_method_name(program) for program in programs}) != len(programs):
         raise ValueError("Discovered program paths produce duplicate OPC UA method names.")
 
     return declarative_opcua_server.create_server(
-        status_interface={"ProgramState": functools.partial(dashboard.get_program_state, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)},
+        status_interface={"ProgramState": functools.partial(dashboard_client.get_program_state, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT)},
         parameter_interface={},
         method_interface={
             "ListPrograms": discover_programs,
-            "LoadProgram": functools.partial(dashboard.load_program, args.dashboard_host, port=args.dashboard_port, timeout=_DASHBOARD_TIMEOUT),
-            "RunProgram": functools.partial(dashboard.play_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
-            "PauseProgram": functools.partial(dashboard.pause_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
-            "StopProgram": functools.partial(dashboard.stop_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+            "LoadProgram": functools.partial(dashboard_client.load_program, args.dashboard_host, port=args.dashboard_port, timeout=_DASHBOARD_TIMEOUT),
+            "RunProgram": functools.partial(dashboard_client.play_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+            "PauseProgram": functools.partial(dashboard_client.pause_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
+            "StopProgram": functools.partial(dashboard_client.stop_program, args.dashboard_host, args.dashboard_port, _DASHBOARD_TIMEOUT),
             **{
                 _program_method_name(program): functools.partial(
-                    dashboard.load_and_play_program, args.dashboard_host, program, args.dashboard_port, _DASHBOARD_TIMEOUT
+                    dashboard_client.load_and_play_program, args.dashboard_host, program, args.dashboard_port, _DASHBOARD_TIMEOUT
                 )
                 for program in programs
             },

@@ -5,15 +5,15 @@ import typing
 import unittest.mock
 
 import pytest
-import universal_robots_clients.rtde as rtde
+import universal_robots_clients.rtde_client as rtde_client
 
 
-def _client() -> typing.Tuple[rtde.Client, unittest.mock.MagicMock, unittest.mock.MagicMock]:
+def _client() -> typing.Tuple[rtde_client.Client, unittest.mock.MagicMock, unittest.mock.MagicMock]:
     """Create one client backed by inspectable fake ur-rtde interfaces."""
     receiver = unittest.mock.MagicMock()
     writer = unittest.mock.MagicMock()
 
-    return rtde.Client(receiver, writer, 42, 46), receiver, writer
+    return rtde_client.Client(receiver, writer, 42, 46), receiver, writer
 
 
 def test_connect_configures_both_upper_range_interfaces(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -24,11 +24,11 @@ def test_connect_configures_both_upper_range_interfaces(monkeypatch: pytest.Monk
     writer_constructor = unittest.mock.MagicMock(return_value=writer)
     receive_module = types.SimpleNamespace(RTDEReceiveInterface=receiver_constructor)
     io_module = types.SimpleNamespace(RTDEIOInterface=writer_constructor)
-    monkeypatch.setattr(rtde, "_load_rtde_modules", lambda: (receive_module, io_module))
+    monkeypatch.setattr(rtde_client, "_load_rtde_modules", lambda: (receive_module, io_module))
 
-    client = rtde.connect("robot", frequency=20.0, use_upper_range_registers=True, verbose=True)
+    client = rtde_client.connect("robot", frequency=20.0, use_upper_range_registers=True, verbose=True)
 
-    assert isinstance(client, rtde.Client)
+    assert isinstance(client, rtde_client.Client)
     assert (client._first_register, client._last_register) == (42, 46)
     receiver_constructor.assert_called_once_with("robot", 20.0, [], True, True)
     writer_constructor.assert_called_once_with("robot", True, True)
@@ -39,10 +39,10 @@ def test_failed_io_connection_closes_receive_interface(monkeypatch: pytest.Monke
     receiver = unittest.mock.MagicMock()
     receive_module = types.SimpleNamespace(RTDEReceiveInterface=lambda *arguments: receiver)
     io_module = types.SimpleNamespace(RTDEIOInterface=unittest.mock.MagicMock(side_effect=ConnectionError("unavailable")))
-    monkeypatch.setattr(rtde, "_load_rtde_modules", lambda: (receive_module, io_module))
+    monkeypatch.setattr(rtde_client, "_load_rtde_modules", lambda: (receive_module, io_module))
 
     with pytest.raises(ConnectionError, match="unavailable"):
-        rtde.connect("robot")
+        rtde_client.connect("robot")
 
     receiver.disconnect.assert_called_once_with()
 
@@ -55,12 +55,12 @@ def test_typed_register_functions_delegate_and_report_failed_writes() -> None:
     writer.setInputIntRegister.return_value = True
     writer.setInputDoubleRegister.return_value = False
 
-    assert rtde.read_output_int_register(client, 42) == 17
-    assert rtde.read_output_double_register(client, 43) == 2.5
-    rtde.write_input_int_register(client, 44, 21)
+    assert rtde_client.read_output_int_register(client, 42) == 17
+    assert rtde_client.read_output_double_register(client, 43) == 2.5
+    rtde_client.write_input_int_register(client, 44, 21)
 
     with pytest.raises(RuntimeError, match="register 45"):
-        rtde.write_input_double_register(client, 45, 3.5)
+        rtde_client.write_input_double_register(client, 45, 3.5)
 
     receiver.getOutputIntRegister.assert_called_once_with(42)
     receiver.getOutputDoubleRegister.assert_called_once_with(43)
@@ -74,7 +74,7 @@ def test_registers_are_validated(register: object) -> None:
     client, receiver, writer = _client()
 
     with pytest.raises(ValueError, match="42 through 46"):
-        rtde.read_output_int_register(client, typing.cast(int, register))
+        rtde_client.read_output_int_register(client, typing.cast(int, register))
 
     receiver.getOutputIntRegister.assert_not_called()
     writer.assert_not_called()
@@ -87,9 +87,9 @@ def test_connection_health_reconnect_and_disconnect_cover_both_interfaces() -> N
     writer.isConnected.return_value = True
     receiver.reconnect.return_value = True
 
-    assert rtde.is_connected(client) is True
-    rtde.reconnect(client)
-    rtde.disconnect(client)
+    assert rtde_client.is_connected(client) is True
+    rtde_client.reconnect(client)
+    rtde_client.disconnect(client)
 
     receiver.reconnect.assert_called_once_with()
     writer.reconnect.assert_not_called()
@@ -105,4 +105,4 @@ def test_failed_reconnect_is_reported() -> None:
     writer.reconnect.return_value = False
 
     with pytest.raises(ConnectionError, match="I/O"):
-        rtde.reconnect(client)
+        rtde_client.reconnect(client)

@@ -29,7 +29,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e "./packages/declarative_opcua_server[test]"
-          python -m pip install -e "./packages/universal_robots_clients[test]"
+          python -m pip install -e "./packages/universal_robots_clients[rtde,test]"
           python -m pip install -e "./code[test]"
 
       - name: Run architecture and unit tests
@@ -60,7 +60,35 @@ jobs:
       - name: Check formatting
         run: |
           python -m black --config code/pyproject.toml --check code/src packages tests
-          python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/README.md packages/universal_robots_clients/README.md tests/README.md
+          python -m mdformat --check --wrap 160 README.md AGENTS.md docs packages/declarative_opcua_server/CHANGELOG.md packages/declarative_opcua_server/README.md packages/universal_robots_clients/CHANGELOG.md packages/universal_robots_clients/README.md tests/README.md
+
+  package-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build and inspect distributions
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "build>=1.2,<2" "twine>=5,<7"
+          python -m build packages/declarative_opcua_server --outdir artifacts/declarative_opcua_server
+          python -m build packages/universal_robots_clients --outdir artifacts/universal_robots_clients
+          python -m twine check artifacts/declarative_opcua_server/* artifacts/universal_robots_clients/*
+
+      - name: Smoke-test built wheels
+        run: |
+          python -m venv .package-smoke
+          OPCUA_WHEEL=$(find artifacts/declarative_opcua_server -name '*.whl')
+          UR_CLIENTS_WHEEL=$(find artifacts/universal_robots_clients -name '*.whl')
+          .package-smoke/bin/python -m pip install "$OPCUA_WHEEL" "${UR_CLIENTS_WHEEL}[all]"
+          .package-smoke/bin/python -c "import declarative_opcua_server; import universal_robots_clients.dashboard_client; import universal_robots_clients.rtde_client; import universal_robots_clients.urp_discovery_client; import universal_robots_clients.urp_discovery_local_client; import universal_robots_clients.urp_discovery_sftp_client"
 
   system:
     runs-on: ubuntu-latest
@@ -78,7 +106,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e "./packages/declarative_opcua_server"
-          python -m pip install -e "./packages/universal_robots_clients[sftp]"
+          python -m pip install -e "./packages/universal_robots_clients[sftp,rtde]"
           python -m pip install -e "./code[system-test]"
 
       - name: Run system tests

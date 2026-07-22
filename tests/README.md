@@ -7,10 +7,13 @@ system contract.
 
 ```text
 packages/declarative_opcua_server/tests/  Real-client OPC UA API and validation tests
-packages/universal_robots_clients/tests/  Dashboard and program-discovery tests
+packages/universal_robots_clients/tests/  Dashboard, selector/local/SFTP discovery, and RTDE tests
 ```
 
 Both are collected by `tests/pytest.ini` so one command runs the complete non-container contract.
+
+CI also builds both packages as source distributions and wheels, validates their metadata and README rendering, then imports every public module from a fresh
+wheel installation.
 
 ## Architecture tests
 
@@ -24,8 +27,8 @@ the system-test runner with fakes and temporary files.
 
 ## System tests
 
-`system/` builds and starts the three installed distributions, URSim, and OpenSSH, then uses a real OPC UA client to verify local and SFTP discovery through to
-Dashboard program execution. These tests are both integration and end-to-end coverage.
+`system/` builds and starts the three installed distributions, URSim, and OpenSSH, then uses real OPC UA and RTDE clients to verify local and SFTP discovery,
+both OPC UA control styles, Dashboard program execution, and RTDE register access. These tests are both integration and end-to-end coverage.
 
 ## Layout
 

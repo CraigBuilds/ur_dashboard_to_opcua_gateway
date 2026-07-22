@@ -11,6 +11,7 @@ ur_dashboard_to_opcua_gateway
     +-- universal-robots-clients
             +-- Python standard library
             +-- paramiko [optional SFTP extra]
+            +-- ur-rtde [optional RTDE extra]
 ```
 
 The two package projects do not depend on one another. The gateway is a deliberately small product-specific composition layer that combines their public
@@ -52,25 +53,27 @@ Its fixed address space is:
 Application/
     Status/       typed zero-argument getters, polled and read-only
     Parameters/   typed one-argument setters, writable by clients
-    Methods/      zero-argument, no-result commands
+    Methods/      typed functions exposed as OPC UA methods
 ```
 
-Function annotations map `bool`, `int`, `float`, `str`, `bytes`, and homogeneous `typing.List` values to OPC UA types. The package validates every interface
-before allocating an asyncua server, adapts method callbacks, intercepts parameter writes, publishes changed status values, and owns polling shutdown. It does
-not know about robots, application schemas, or process signals.
+Function annotations map `bool`, `int`, `float`, `str`, `bytes`, and homogeneous `typing.List` values to OPC UA types. Required annotated method arguments
+become OPC UA inputs, and an annotated return becomes an output. The package validates every interface before allocating and returning a plain
+`asyncua.sync.Server`, adapts method callbacks, intercepts parameter writes, and publishes changed status values. It does not know about robots, application
+schemas, or process signals.
 
 ### universal-robots-clients
 
 The root package re-exports nothing. Consumers retain protocol context in every call:
 
 ```python
-import universal_robots_clients.dashboard as dashboard
-import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.rtde_client as rtde_client
+import universal_robots_clients.urp_discovery_client as urp_discovery_client
 ```
 
-`dashboard` owns TCP framing, validation, and named Dashboard operations. `program_discovery` owns local and caller-owned SFTP traversal plus an optional
-Paramiko connection convenience function. The modules do not import one another. A real `rtde` module will be added only after its dependency, connection
-lifecycle, and register contract are proven.
+`dashboard_client` owns TCP framing, validation, and named Dashboard operations. `urp_discovery_client` selects the explicit local and SFTP discovery clients;
+only `urp_discovery_sftp_client` can load optional Paramiko. `rtde_client` owns an optional `ur-rtde` connection and typed integer/double register I/O.
+Invocation schemas, register allocation, and commit/acknowledgement policy remain gateway concerns.
 
 ## Dependencies
 
@@ -85,8 +88,8 @@ _02_parse_command_line_args
 _03_compose_gateway
     +-- _02_parse_command_line_args
     +-- declarative_opcua_server
-    +-- universal_robots_clients.dashboard
-    +-- universal_robots_clients.program_discovery
+    +-- universal_robots_clients.dashboard_client
+    +-- universal_robots_clients.urp_discovery_client
 ```
 
 The graph is acyclic. The extracted packages accept ordinary values and callables and never import the gateway's `Args`. Cross-module calls retain module
@@ -98,18 +101,19 @@ namespaces so their owner remains visible at each call site.
 _01_main.main()
     -> _02_parse_command_line_args.parse_args()
     -> _03_compose_gateway.compose_gateway(args)
-        -> universal_robots_clients.program_discovery.*
-        -> build StartProgram_..., PauseProgram, StopProgram, and ProgramState callables
+        -> universal_robots_clients.urp_discovery_client.discover_programs(...)
+        -> build generic control, StartProgram_..., and ProgramState callables
         -> declarative_opcua_server.create_server(...)
     -> _01_main._run_until_stopped(server)
 ```
 
-Discovery runs once during composition. The composition root uses a comprehension to create a flat `StartProgram_...` method for each program and adds
-controller-wide pause and stop methods. A start method applies the gateway's load-then-play policy through qualified Dashboard package calls. `ProgramState`
-uses the reusable Dashboard getter; the declarative server polls it and publishes changes. The parameter interface remains empty until RTDE is implemented.
+Discovery runs once during composition to generate a flat `StartProgram_...` method for each program. The root also exposes dynamic `ListPrograms`,
+`LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram` methods. A generated start method binds the reusable Dashboard `load_and_play_program()`
+operation, while the generic methods let a client perform those steps separately. `ProgramState` uses the reusable Dashboard getter; the declarative server
+polls it and publishes changes. The parameter interface remains empty until the RTDE invocation contract is implemented.
 
-The main module enters the managed server context and waits for `SIGINT` or `SIGTERM`. The declarative package starts its asyncua server and polling thread on
-entry and stops both on exit.
+The main module enters the plain asyncua server context and waits for `SIGINT` or `SIGTERM`. Asyncua owns server startup and shutdown; the package's daemon
+polling thread follows the lifetime of asyncua's thread loop.
 
 ## Public gateway API
 
@@ -160,6 +164,6 @@ distributions.
 
 ## Python compatibility
 
-All distributions support Python 3.8.3 and later. Runtime annotations use Python 3.8-compatible `typing` forms. `declarative-opcua-server` selects asyncua 1.1.5
-for Python below 3.10 and asyncua 2.0.1 for newer interpreters. CI runs non-container tests on Python 3.8.3 and 3.12 and runs the real container pipeline on
-Python 3.12.
+All distributions support Python 3.8.3 and later. Runtime annotations use Python 3.8-compatible `typing` forms. `declarative-opcua-server` selects the asyncua
+1.x line from 1.1.5 for Python below 3.10 and the 2.x line from 2.0.1 for newer interpreters. CI runs non-container tests on Python 3.8.3 and 3.12 and runs the
+real container pipeline on Python 3.12.

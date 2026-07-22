@@ -1,0 +1,3 @@
+include CHANGELOG.md
+include README.md
+include src/universal_robots_clients/py.typed

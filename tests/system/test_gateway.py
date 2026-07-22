@@ -23,9 +23,9 @@ def child(parent: asyncua.sync.SyncNode, namespace: int, name: str) -> asyncua.s
     return parent.get_child([f"{namespace}:{name}"])
 
 
-def call(parent: asyncua.sync.SyncNode, namespace: int, name: str) -> object:
-    """Call one no-argument OPC UA method beneath an object node."""
-    return parent.call_method(child(parent, namespace, name))
+def call(parent: asyncua.sync.SyncNode, namespace: int, name: str, *arguments: object) -> object:
+    """Call one OPC UA method beneath an object node."""
+    return parent.call_method(child(parent, namespace, name), *arguments)
 
 
 def robot_node(client: asyncua.sync.Client) -> typing.Tuple[int, asyncua.sync.SyncNode]:
@@ -64,7 +64,15 @@ def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typi
             assert isinstance(wait_for_status(child(status, namespace, "ProgramState")), str)
             expected_method_names = {"StartProgram_" + "_".join(part.replace(".urp", "") for part in program.split("/")) for program in expected}
             actual_method_names = {node.read_browse_name().Name for node in methods.get_children()}
-            assert expected_method_names | {"PauseProgram", "StopProgram"} == actual_method_names
+            assert expected_method_names | {"ListPrograms", "LoadProgram", "RunProgram", "PauseProgram", "StopProgram"} == actual_method_names
+
+            assert call(methods, namespace, "ListPrograms") == expected
+            call(methods, namespace, "LoadProgram", "Main.urp")
+            assert "Main.urp" in lab.ursim.command("get loaded program")
+            call(methods, namespace, "RunProgram")
+            lab.ursim.wait_for_program_state("PLAYING")
+            call(methods, namespace, "StopProgram")
+            lab.ursim.wait_for_program_state("STOPPED")
 
             call(methods, namespace, "StartProgram_Main")
             lab.ursim.wait_for_program_state("PLAYING")

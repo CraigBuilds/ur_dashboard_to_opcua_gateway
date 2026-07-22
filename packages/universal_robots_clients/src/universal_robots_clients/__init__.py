@@ -1,11 +1,12 @@
 """Collect independent clients for Universal Robots protocols and program assets.
 
-The distribution currently contains ``dashboard`` for one-command Dashboard Server exchanges and ``program_discovery`` for deterministic local or SFTP URP
-catalogues. Consumers import those modules explicitly so calls retain protocol context, optional dependencies remain isolated, and future RTDE support can have
-its own lifecycle without creating a monolithic robot client.
+The distribution contains ``dashboard_client`` for Dashboard Server exchanges, three explicit URP discovery clients for backend selection, local filesystems,
+and SFTP, and ``rtde_client`` for persistent typed register exchange. Consumers import those modules explicitly so calls retain protocol context and optional
+dependencies remain isolated without creating a monolithic robot client.
 
-The root package intentionally re-exports no functions. Dashboard uses only the Python standard library, local discovery uses ``pathlib``, and SFTP discovery
-loads optional Paramiko support only when requested. The package has no dependency on OPC UA or on any gateway application.
+The root package intentionally re-exports no functions. Dashboard and local discovery use only the Python standard library. SFTP discovery loads optional
+Paramiko only when connecting, and the RTDE client loads optional ``ur-rtde`` only when creating a connection. The package has no dependency on OPC UA or any
+gateway.
 """
 
 __all__ = []

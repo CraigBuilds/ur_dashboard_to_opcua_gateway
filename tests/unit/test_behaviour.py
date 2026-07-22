@@ -7,8 +7,9 @@ import typing
 import unittest.mock
 
 import pytest
-import universal_robots_clients.dashboard as dashboard
-import universal_robots_clients.program_discovery as program_discovery
+import universal_robots_clients.dashboard_client as dashboard_client
+import universal_robots_clients.urp_discovery_client as urp_discovery_client
+import universal_robots_clients.urp_discovery_sftp_client as urp_discovery_sftp_client
 import ur_dashboard_to_opcua_gateway._01_main as main_module
 import ur_dashboard_to_opcua_gateway._02_parse_command_line_args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway._03_compose_gateway as compose_gateway
@@ -62,36 +63,29 @@ def test_sftp_args_prompt_for_password_and_preserve_overrides(monkeypatch: pytes
 
 
 @pytest.mark.parametrize(
-    ("args", "message"),
+    ("catalog", "robot_host", "robot_password", "message"),
     [
-        (parse_command_line_args.Args(catalog="invalid"), "Unsupported catalogue"),
-        (parse_command_line_args.Args(catalog="sftp", robot_password="secret"), "Robot host is required"),
-        (parse_command_line_args.Args(catalog="sftp", robot_host="robot"), "Robot password is required"),
+        ("invalid", None, None, "Unsupported catalogue"),
+        ("sftp", None, "secret", "Robot host is required"),
+        ("sftp", "robot", None, "Robot password is required"),
     ],
 )
-def test_discovery_rejects_invalid_configuration(args: parse_command_line_args.Args, message: str) -> None:
-    """Report unsupported or incomplete discovery configuration clearly."""
+def test_args_reject_invalid_configuration(catalog: str, robot_host: typing.Optional[str], robot_password: typing.Optional[str], message: str) -> None:
+    """Reject unsupported or incomplete discovery configuration at the application boundary."""
     with pytest.raises(ValueError, match=message):
-        compose_gateway._discover_programs(args)
+        parse_command_line_args.Args(catalog=catalog, robot_host=robot_host, robot_password=robot_password)
 
 
 def test_sftp_discovery_delegates_resolved_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pass application configuration into the reusable SFTP discovery package."""
-    captured: typing.Dict[str, object] = {}
+    discover = unittest.mock.MagicMock(return_value=["Main.urp"])
 
-    def discover(**configuration: object) -> typing.List[str]:
-        """Capture one package discovery call."""
-        captured.update(configuration)
+    monkeypatch.setattr(urp_discovery_client.urp_discovery_sftp_client, "connect_and_discover_programs", discover)
 
-        return ["Main.urp"]
-
-    monkeypatch.setattr(program_discovery, "discover_programs_over_sftp", discover)
-    args = parse_command_line_args.Args(
-        catalog="sftp", programs_folder="/robot/programs", robot_host="robot", robot_password="secret", sftp_port=2222, sftp_username="operator"
-    )
-
-    assert compose_gateway._discover_programs(args) == ["Main.urp"]
-    assert captured == {"host": "robot", "root": "/robot/programs", "username": "operator", "password": "secret", "port": 2222, "trust_unknown_host_keys": True}
+    assert urp_discovery_client.discover_programs(
+        "sftp", "/robot/programs", host="robot", username="operator", password="secret", port=2222, trust_unknown_host_keys=True
+    ) == ["Main.urp"]
+    discover.assert_called_once_with("robot", "/robot/programs", "operator", "secret", 2222, urp_discovery_sftp_client.DEFAULT_TIMEOUT, True)
 
 
 def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -112,29 +106,59 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
 
         return run
 
-    monkeypatch.setattr(dashboard, "load_program", load)
-    monkeypatch.setattr(dashboard, "play_program", command("play", "played"))
-    monkeypatch.setattr(dashboard, "pause_program", command("pause", "paused"))
-    monkeypatch.setattr(dashboard, "stop_program", command("stop", "stopped"))
-    monkeypatch.setattr(dashboard, "get_program_state", command("state", "STOPPED"))
+    monkeypatch.setattr(dashboard_client, "load_program", load)
+    monkeypatch.setattr(dashboard_client, "play_program", command("play", "played"))
+    monkeypatch.setattr(dashboard_client, "pause_program", command("pause", "paused"))
+    monkeypatch.setattr(dashboard_client, "stop_program", command("stop", "stopped"))
+    monkeypatch.setattr(dashboard_client, "get_program_state", command("state", "STOPPED"))
     args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000)
-    monkeypatch.setattr(compose_gateway, "_discover_programs", lambda actual: ["Main.urp", "Production/Pick Part.urp"])
+    discoveries: typing.List[typing.Tuple[object, ...]] = []
+
+    def discover(
+        backend: str,
+        root: object,
+        host: typing.Optional[str],
+        username: str,
+        password: typing.Optional[str],
+        port: int,
+        timeout: float = 5.0,
+        trust_unknown_host_keys: bool = False,
+    ) -> typing.List[str]:
+        discoveries.append((backend, root, host, username, password, port, timeout, trust_unknown_host_keys))
+
+        return ["Main.urp", "Production/Pick Part.urp"]
+
+    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", discover)
     monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or object())
 
     compose_gateway.compose_gateway(args)
 
     status_interface = typing.cast(typing.Dict[str, typing.Callable[[], object]], captured["status_interface"])
-    method_interface = typing.cast(typing.Dict[str, typing.Callable[[], None]], captured["method_interface"])
+    method_interface = typing.cast(typing.Dict[str, typing.Callable[..., object]], captured["method_interface"])
     assert captured["parameter_interface"] == {}
-    assert set(method_interface) == {"StartProgram_Main", "StartProgram_Production_Pick_Part", "PauseProgram", "StopProgram"}
+    assert set(method_interface) == {
+        "ListPrograms",
+        "LoadProgram",
+        "RunProgram",
+        "PauseProgram",
+        "StopProgram",
+        "StartProgram_Main",
+        "StartProgram_Production_Pick_Part",
+    }
     assert inspect_signature_parameters(status_interface) == set()
-    assert inspect_signature_parameters(method_interface) == set()
+    assert inspect_required_signature_parameters(method_interface) == {"program"}
     assert status_interface["ProgramState"]() == "STOPPED"
+    assert method_interface["ListPrograms"]() == ["Main.urp", "Production/Pick Part.urp"]
+    assert method_interface["LoadProgram"]("Main.urp") == "loaded"
+    assert method_interface["RunProgram"]() == "played"
     method_interface["StartProgram_Production_Pick_Part"]()
     method_interface["PauseProgram"]()
     method_interface["StopProgram"]()
+    assert len(discoveries) == 2
     assert calls == [
         ("state", ("robot", 30000, 5.0)),
+        ("load", ("robot", "Main.urp", 30000, 5.0)),
+        ("play", ("robot", 30000, 5.0)),
         ("load", ("robot", "Production/Pick Part.urp", 30000, 5.0)),
         ("play", ("robot", 30000, 5.0)),
         ("pause", ("robot", 30000, 5.0)),
@@ -149,16 +173,29 @@ def inspect_signature_parameters(interface: typing.Mapping[str, typing.Callable[
     return {parameter for function in interface.values() for parameter in inspect.signature(function).parameters}
 
 
-def test_program_method_name_collisions_are_rejected() -> None:
+def inspect_required_signature_parameters(interface: typing.Mapping[str, typing.Callable[..., object]]) -> typing.Set[str]:
+    """Return required parameters remaining on an interface's functions."""
+    import inspect
+
+    return {
+        name
+        for function in interface.values()
+        for name, parameter in inspect.signature(function).parameters.items()
+        if parameter.default is inspect.Parameter.empty
+    }
+
+
+def test_program_method_name_collisions_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reject distinct program paths that flatten to the same OPC UA method name."""
     args = parse_command_line_args.Args(catalog="local")
+    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: ["Pick-Part.urp", "Pick Part.urp"])
 
     with pytest.raises(ValueError, match="duplicate"):
-        compose_gateway._create_method_interface(args, ["Pick-Part.urp", "Pick Part.urp"])
+        compose_gateway.compose_gateway(args)
 
 
 def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the managed server active until either installed signal requests shutdown."""
+    """Keep the plain server active until either installed signal requests shutdown."""
     server = unittest.mock.MagicMock()
     stopped = unittest.mock.MagicMock()
     handlers: typing.Dict[int, typing.Callable[[int, typing.Optional[types.FrameType]], None]] = {}

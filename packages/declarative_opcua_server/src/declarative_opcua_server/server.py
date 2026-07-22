@@ -1,16 +1,16 @@
 """Implement the package's fixed Status, Parameters, and Methods address space.
 
-``create_server()`` validates three flat mappings and creates a configured but unstarted managed server. Status getters are polled on one package-owned thread
-and changed values are written through ``asyncua`` so ordinary OPC UA subscriptions receive notifications. Parameter setters are installed at the server's
-attribute-write boundary, allowing a client write to call application code before the accepted value is retained. Method functions are wrapped to hide the
-parent-node argument required by ``asyncua``.
+``create_server()`` validates three flat mappings and returns a configured ``asyncua.sync.Server``. Status getters are polled on a small background thread and
+changed values are written through ``asyncua`` so ordinary OPC UA subscriptions receive notifications. The thread follows the lifetime of asyncua's own thread
+loop, leaving startup, shutdown, and context management to the returned server. Parameter setters are installed at the server's attribute-write boundary, and
+method functions are wrapped to hide the parent-node argument required by ``asyncua``.
 
 Function annotations are part of the runtime contract. A small internal map supports scalar booleans, integers, doubles, strings, and byte strings, plus
 homogeneous one-dimensional ``typing.List`` values of those types. Unsupported, unresolved, or contextually invalid signatures fail while the server is being
 created rather than producing a malformed address space later.
 
-This internal module depends on ``asyncua`` plus standard-library inspection, threading, typing, logging, and dataclass support. Only the package root re-exports
-``create_server()``; binding records, type resolution, callback wrappers, and the managed server implementation remain private.
+This implementation module depends on ``asyncua`` plus standard-library inspection, threading, typing, logging, and dataclass support. The package root
+re-exports ``create_server()``; binding records, type resolution, polling, and callback wrappers remain private.
 """
 
 import copy
@@ -19,7 +19,7 @@ import functools
 import inspect
 import logging
 import threading
-import types
+import time
 import typing
 
 import asyncua
@@ -28,11 +28,12 @@ import asyncua.ua
 
 _StatusFunction = typing.Callable[[], typing.Any]
 _ParameterFunction = typing.Callable[..., None]
-_MethodFunction = typing.Callable[[], None]
+_MethodFunction = typing.Callable[..., typing.Any]
 _StatusInterface = typing.Mapping[str, _StatusFunction]
 _ParameterInterface = typing.Mapping[str, _ParameterFunction]
 _MethodInterface = typing.Mapping[str, _MethodFunction]
 _TypeDefinition = typing.Tuple[asyncua.ua.VariantType, typing.Any, typing.Type[typing.Any], bool]
+_MethodDefinition = typing.Tuple[typing.List[typing.Tuple[str, _TypeDefinition]], typing.Optional[_TypeDefinition]]
 
 _LOGGER = logging.getLogger(__name__)
 _POLL_INTERVAL_SECONDS = 0.1
@@ -61,70 +62,40 @@ class _StatusBinding:
     last_value: typing.Any
 
 
-@dataclasses.dataclass
-class _ManagedServer:
-    """Own an asyncua server together with its polling lifecycle."""
+def _poll_status(server: asyncua.sync.Server, bindings: typing.Sequence[_StatusBinding]) -> None:
+    """Publish changed status values while asyncua's thread loop is alive."""
+    while server.tloop.is_alive():
+        time.sleep(_POLL_INTERVAL_SECONDS)
 
-    _server: asyncua.sync.Server
-    _status_bindings: typing.List[_StatusBinding]
-    _stop_requested: threading.Event = dataclasses.field(default_factory=threading.Event)
-    _polling_thread: typing.Optional[threading.Thread] = None
+        if not server.tloop.is_alive():
+            return
 
-    def start(self) -> None:
-        """Start OPC UA service and status polling."""
-        if self._polling_thread is not None:
-            raise RuntimeError("Server has already been started.")
+        if server.aio_obj.bserver is None:
+            continue
 
-        self._server.start()
-        thread = threading.Thread(target=self._poll_status, name="declarative-opcua-status", daemon=True)
-        self._polling_thread = thread
-        thread.start()
+        for binding in bindings:
+            try:
+                value = binding.reader()
+                _validate_runtime_value(binding.name, value, binding.python_type, binding.is_array)
 
-    def stop(self) -> None:
-        """Stop status polling and OPC UA service."""
-        self._stop_requested.set()
-        thread = self._polling_thread
+                if value == binding.last_value:
+                    continue
 
-        if thread is not None:
-            thread.join(timeout=5.0)
+                snapshot = copy.deepcopy(value)
+                variant = asyncua.ua.Variant(snapshot, binding.variant_type)
+                binding.variable.write_value(variant)
+                binding.last_value = snapshot
+            except Exception:
+                _LOGGER.exception("Could not refresh OPC UA status node %s.", binding.name)
 
-            if thread.is_alive():
-                _LOGGER.warning("Status polling did not stop before the OPC UA server shutdown timeout.")
 
-        self._server.stop()
+def _start_status_polling(server: asyncua.sync.Server, bindings: typing.Sequence[_StatusBinding]) -> None:
+    """Start polling when the interface contains status getters."""
+    if not bindings:
+        return
 
-    def __enter__(self) -> "_ManagedServer":
-        """Start and return this context-managed server."""
-        self.start()
-
-        return self
-
-    def __exit__(
-        self,
-        _exception_type: typing.Optional[typing.Type[BaseException]],
-        _exception: typing.Optional[BaseException],
-        _traceback: typing.Optional[types.TracebackType],
-    ) -> None:
-        """Stop this context-managed server."""
-        self.stop()
-
-    def _poll_status(self) -> None:
-        """Publish changed status values until shutdown is requested."""
-        while not self._stop_requested.wait(_POLL_INTERVAL_SECONDS):
-            for binding in self._status_bindings:
-                try:
-                    value = binding.reader()
-                    _validate_runtime_value(binding.name, value, binding.python_type, binding.is_array)
-
-                    if value == binding.last_value:
-                        continue
-
-                    snapshot = copy.deepcopy(value)
-                    variant = asyncua.ua.Variant(snapshot, binding.variant_type)
-                    binding.variable.write_value(variant)
-                    binding.last_value = snapshot
-                except Exception:
-                    _LOGGER.exception("Could not refresh OPC UA status node %s.", binding.name)
+    thread = threading.Thread(target=_poll_status, args=(server, bindings), name="declarative-opcua-status", daemon=True)
+    thread.start()
 
 
 def _function_name(function: typing.Callable[..., typing.Any]) -> str:
@@ -253,27 +224,52 @@ def _parameter_definition(name: str, writer: _ParameterFunction) -> _TypeDefinit
     return _resolve_type(annotation, "Parameter", _function_name(writer))
 
 
-def _validate_method(name: str, method: _MethodFunction) -> None:
-    """Validate one no-argument, no-result method function."""
+def _method_definition(name: str, method: _MethodFunction) -> _MethodDefinition:
+    """Validate one method and return its required inputs and optional output."""
     signature = inspect.signature(method)
+    hints = _resolved_hints(method)
+    inputs: typing.List[typing.Tuple[str, _TypeDefinition]] = []
 
-    if signature.parameters:
-        message = f"Method function '{_function_name(method)}' for '{name}' must accept no arguments."
-        raise TypeError(message)
+    for parameter in signature.parameters.values():
+        if parameter.default is not inspect.Parameter.empty:
+            continue
+
+        if parameter.kind not in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            message = f"Method function '{_function_name(method)}' for '{name}' may only expose required positional arguments."
+            raise TypeError(message)
+
+        annotation = hints.get(parameter.name, parameter.annotation)
+
+        if annotation is inspect.Parameter.empty:
+            message = f"Method function '{_function_name(method)}' for '{name}' must annotate argument '{parameter.name}'."
+            raise TypeError(message)
+
+        inputs.append((parameter.name, _resolve_type(annotation, "Method", _function_name(method))))
 
     annotation = _resolved_return_type(method)
+    output = None if _is_none_annotation(annotation) else _resolve_type(annotation, "Method", _function_name(method))
 
-    if not _is_none_annotation(annotation):
-        message = f"Method function '{_function_name(method)}' for '{name}' must not return a value."
-        raise TypeError(message)
+    return inputs, output
 
 
-def _adapt_method(method: _MethodFunction) -> typing.Callable[..., None]:
+def _method_argument(name: str, definition: _TypeDefinition) -> asyncua.ua.Argument:
+    """Create one typed OPC UA method argument declaration."""
+    variant_type, _default_value, _python_type, is_array = definition
+    argument = asyncua.ua.Argument()
+    argument.Name = name
+    argument.DataType = asyncua.ua.NodeId(variant_type.value)
+    argument.ValueRank = 1 if is_array else -1
+    argument.ArrayDimensions = [0] if is_array else []
+
+    return argument
+
+
+def _adapt_method(method: _MethodFunction) -> typing.Callable[..., typing.Any]:
     """Hide asyncua's parent-node callback argument from an application method."""
 
     @asyncua.uamethod
-    def opcua_method(_parent_node_id: asyncua.ua.NodeId) -> None:
-        method()
+    def opcua_method(_parent_node_id: asyncua.ua.NodeId, *arguments: typing.Any) -> typing.Any:
+        return method(*arguments)
 
     return opcua_method
 
@@ -302,11 +298,11 @@ def create_server(
     endpoint: str = _DEFAULT_ENDPOINT,
     namespace: str = _DEFAULT_NAMESPACE,
     root_object: str = _DEFAULT_ROOT_OBJECT,
-) -> _ManagedServer:
-    """Create a configured but unstarted server from three flat function interfaces.
+) -> asyncua.sync.Server:
+    """Create a configured plain asyncua synchronous server.
 
     Used by applications that need a compact synchronous OPC UA adapter, including
-    ``ur_dashboard_to_opcua_gateway._07_expose_program_commands_via_opcua``.
+    ``ur_dashboard_to_opcua_gateway._03_compose_gateway``.
     """
     _validate_names("Status interface", status_interface)
     _validate_names("Parameter interface", parameter_interface)
@@ -314,8 +310,7 @@ def create_server(
     status_definitions = [(name, reader, _status_definition(name, reader)) for name, reader in status_interface.items()]
     parameter_definitions = [(name, writer, _parameter_definition(name, writer)) for name, writer in parameter_interface.items()]
 
-    for name, method in method_interface.items():
-        _validate_method(name, method)
+    method_definitions = [(name, method, _method_definition(name, method)) for name, method in method_interface.items()]
 
     server = asyncua.sync.Server()
     server.set_endpoint(endpoint)
@@ -343,7 +338,12 @@ def create_server(
         variable.set_writable(True)
         _install_parameter_writer(server, variable, name, writer, python_type, is_array)
 
-    for name, method in method_interface.items():
-        method_folder.add_method(namespace_index, name, _adapt_method(method))
+    for name, method, definition in method_definitions:
+        inputs, output = definition
+        input_arguments = [_method_argument(argument_name, argument_definition) for argument_name, argument_definition in inputs]
+        output_arguments = [] if output is None else [_method_argument("Result", output)]
+        method_folder.add_method(namespace_index, name, _adapt_method(method), input_arguments, output_arguments)
 
-    return _ManagedServer(server, status_bindings)
+    _start_status_polling(server, status_bindings)
+
+    return server

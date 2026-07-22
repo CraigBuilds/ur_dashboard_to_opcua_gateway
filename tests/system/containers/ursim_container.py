@@ -7,7 +7,7 @@ import typing
 
 import testcontainers.core.container as tc_container
 import testcontainers.core.network as tc_network
-import universal_robots_clients.dashboard as dashboard
+import universal_robots_clients.dashboard_client as dashboard_client
 
 import tests.support.waiting as waiting
 
@@ -15,6 +15,7 @@ URSIM_IMAGE = "universalrobots/ursim_e-series:5.25.2"
 URSIM_PROGRAMS = "/ursim/programs.UR20"
 DASHBOARD_PORT = 29999
 OPCUA_PORT = 4840
+RTDE_PORT = 30004
 START_TIMEOUT = 240.0
 ROBOT_TIMEOUT = 90.0
 
@@ -33,6 +34,7 @@ class UrSimContainer:
             network=network,
             network_aliases=["ursim"],
         )
+        container.with_bind_ports(RTDE_PORT, RTDE_PORT)
         self._container = container
 
     @property
@@ -89,7 +91,7 @@ class UrSimContainer:
 
     def command(self, command: str) -> str:
         """Send a real Dashboard command."""
-        return dashboard.send_command(self.host, command, self.dashboard_port)
+        return dashboard_client.send_command(self.host, command, self.dashboard_port)
 
     def prepare_robot(self) -> None:
         """Prepare URSim to execute the safe test program."""

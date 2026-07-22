@@ -4,22 +4,57 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "declarative-opcua-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "Create an opinionated OPC UA server from flat Python function interfaces"
 readme = "README.md"
 requires-python = ">=3.8.3"
-dependencies = [
-    "asyncua==1.1.5; python_version < '3.10'",
-    "asyncua==2.0.1; python_version >= '3.10'",
+authors = [
+    { name = "CraigBuilds" },
 ]
+keywords = ["asyncua", "automation", "industrial", "opc-ua", "opcua"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "asyncua>=1.1.5,<2; python_version < '3.10'",
+    "asyncua>=2.0.1,<3; python_version >= '3.10'",
+    "cryptography>42.0.0,<48; python_version < '3.9'",
+]
+
+[project.urls]
+Documentation = "https://github.com/CraigBuilds/ur_dashboard_to_opcua_gateway/tree/main/packages/declarative_opcua_server"
+Issues = "https://github.com/CraigBuilds/ur_dashboard_to_opcua_gateway/issues"
+Repository = "https://github.com/CraigBuilds/ur_dashboard_to_opcua_gateway"
 
 [project.optional-dependencies]
 test = [
     "pytest>=8,<10",
 ]
+dev = [
+    "build>=1.2,<2",
+    "pytest>=8,<10",
+    "twine>=5,<7",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+declarative_opcua_server = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.black]
 line-length = 160

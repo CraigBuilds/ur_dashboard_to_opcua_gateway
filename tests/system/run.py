@@ -11,6 +11,7 @@ import typing
 
 _MINIMUM_PYTHON = (3, 10)
 _PROJECT_CACHE_NAME = "ur_dashboard_to_opcua_gateway"
+_DOCKER_ENGINE_MODULE = "tests.system.docker_engine"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -194,18 +195,13 @@ def _test_environment() -> typing.Dict[str, str]:
     return environment
 
 
-def _require_docker(repository: pathlib.Path) -> str:
-    """Return the Docker executable after validating the daemon platform."""
-    docker = shutil.which("docker")
-
-    if docker is None:
-        message = "Docker was not found. Install and start Docker Desktop or Docker Engine with Linux amd64 containers, then run this command again."
-        raise RuntimeError(message)
-
+def _require_docker(python: pathlib.Path, repository: pathlib.Path, environment: typing.Dict[str, str]) -> None:
+    """Validate the daemon platform through the prepared Docker SDK."""
     try:
-        platform = _capture([docker, "info", "--format", "{{.OSType}}/{{.Architecture}}"], repository)
+        platform = _capture([str(python), "-m", _DOCKER_ENGINE_MODULE, "info"], repository, environment)
     except subprocess.CalledProcessError as error:
-        message = "Docker is installed, but its daemon is not available. Start Docker and wait until it is ready."
+        detail = error.stderr.strip() if error.stderr else "Start Docker Desktop or Docker Engine and wait until it is ready."
+        message = f"Docker validation failed: {detail}"
         raise RuntimeError(message) from error
 
     operating_system, separator, architecture = platform.partition("/")
@@ -215,8 +211,6 @@ def _require_docker(repository: pathlib.Path) -> str:
         message = f"The URSim system tests require a Linux amd64 Docker engine; Docker reported {platform!r}."
         raise RuntimeError(message)
 
-    return docker
-
 
 def _ursim_image(python: pathlib.Path, repository: pathlib.Path, environment: typing.Dict[str, str]) -> str:
     """Read the pinned URSim image from the test harness."""
@@ -225,11 +219,11 @@ def _ursim_image(python: pathlib.Path, repository: pathlib.Path, environment: ty
     return _capture([str(python), "-c", statement], repository, environment)
 
 
-def _pull_ursim_image(docker: str, python: pathlib.Path, repository: pathlib.Path, environment: typing.Dict[str, str]) -> None:
+def _pull_ursim_image(python: pathlib.Path, repository: pathlib.Path, environment: typing.Dict[str, str]) -> None:
     """Pull the exact URSim image used by the system tests."""
     image = _ursim_image(python, repository, environment)
     print(f"\nThe first pull is large. Preparing {image}.", flush=True)
-    _run([docker, "pull", image], repository)
+    _run([str(python), "-m", _DOCKER_ENGINE_MODULE, "pull", image], repository, environment)
 
 
 def _run_tests(
@@ -262,7 +256,6 @@ def _main() -> int:
     try:
         python_command, version = _find_supported_python(repository, args.python)
         environment_path = _venv_path(args.venv, version)
-        docker = None if args.collect_only else _require_docker(repository)
 
         if args.skip_install:
             python = _venv_python(environment_path)
@@ -277,8 +270,11 @@ def _main() -> int:
         print(f"Using Python {'.'.join(str(part) for part in version)} and environment {environment_path}.", flush=True)
         environment = _test_environment()
 
-        if docker is not None and not args.no_pull:
-            _pull_ursim_image(docker, python, repository, environment)
+        if not args.collect_only:
+            _require_docker(python, repository, environment)
+
+            if not args.no_pull:
+                _pull_ursim_image(python, repository, environment)
 
         pytest_cache = environment_path.parent / f"{environment_path.name}-pytest-cache"
         _run_tests(python, repository, pytest_cache, args.catalog, args.collect_only, args.pytest_arguments)

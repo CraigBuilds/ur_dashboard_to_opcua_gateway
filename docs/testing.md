@@ -4,9 +4,11 @@
 
 Executable tests are organized by both distribution ownership and scope:
 
-- `packages/declarative_opcua_server/tests/` verifies the standalone OPC UA API with validation tests and a real asyncua client.
-- `packages/universal_robots_clients/tests/` verifies Dashboard framing, selector/local/SFTP discovery, and RTDE operations with deterministic fakes.
-- `tests/architecture/` statically enforces conventions across all three distributions and their tests.
+- The [`declarative-opcua-server`](https://github.com/CraigBuilds/declarative-opcua-server) repository verifies the standalone OPC UA API with validation tests
+  and a real asyncua client.
+- The [`universal-robots-clients`](https://github.com/CraigBuilds/universal-robots-clients) repository verifies deterministic unit behavior plus real Dashboard
+  and RTDE calls to official URSim and local/SFTP discovery through a disposable OpenSSH server.
+- `tests/architecture/` statically enforces gateway conventions.
 - `tests/unit/` verifies gateway configuration, package binding, interface policy, composition, and lifecycle.
 - `tests/system/` verifies the installed distributions together with real URSim, OpenSSH, the gateway container, and an OPC UA client.
 
@@ -93,8 +95,8 @@ python tests/system/run.py --collect-only
 
 For each arrangement, a real OPC UA client browses the flat `Status`, `Parameters`, and `Methods` folders, checks every basic RTDE status type, changes the
 speed slider and a tool output, lists programs, loads and runs a selected program through generic methods, invokes generated program start methods, pauses and
-stops execution, and confirms loaded and playing state directly through URSim. A separate system contract connects the reusable RTDE client to the same URSim
-instance and exercises telemetry, speed, tool I/O, and typed register access.
+stops execution, and confirms loaded and playing state directly through URSim. Direct Dashboard, RTDE, and discovery contracts run in the robot-client package
+repository instead of being duplicated here.
 
 The local arrangement mounts programs and shares the URSim network namespace. The SFTP arrangement uses a private Docker network containing the gateway, URSim,
 and OpenSSH. The same OPC UA contract must pass in both cases.

@@ -9,8 +9,6 @@ import unittest.mock
 import pytest
 import universal_robots_clients.dashboard_client as dashboard_client
 import universal_robots_clients.rtde_client as rtde_client
-import universal_robots_clients.urp_discovery_client as urp_discovery_client
-import universal_robots_clients.urp_discovery_sftp_client as urp_discovery_sftp_client
 import ur_dashboard_to_opcua_gateway.main as main_module
 import ur_dashboard_to_opcua_gateway.args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway.gateway as compose_gateway
@@ -95,18 +93,6 @@ def test_args_reject_invalid_configuration(catalog: str, robot_host: typing.Opti
     """Reject unsupported or incomplete discovery configuration at the application boundary."""
     with pytest.raises(ValueError, match=message):
         parse_command_line_args.Args(catalog=catalog, robot_host=robot_host, robot_password=robot_password)
-
-
-def test_sftp_discovery_delegates_resolved_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pass application configuration into the reusable SFTP discovery package."""
-    discover = unittest.mock.MagicMock(return_value=["Main.urp"])
-
-    monkeypatch.setattr(urp_discovery_client.urp_discovery_sftp_client, "connect_and_discover_programs", discover)
-
-    assert urp_discovery_client.discover_programs(
-        "sftp", "/robot/programs", host="robot", username="operator", password="secret", port=2222, trust_unknown_host_keys=True
-    ) == ["Main.urp"]
-    discover.assert_called_once_with("robot", "/robot/programs", "operator", "secret", 2222, urp_discovery_sftp_client.DEFAULT_TIMEOUT, True)
 
 
 def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:

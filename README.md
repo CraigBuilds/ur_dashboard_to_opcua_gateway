@@ -203,7 +203,8 @@ python tests/system/run.py
 ```
 
 The runner installs all three distributions into an isolated environment, builds the gateway image from the repository root, and verifies local and SFTP
-discovery, both OPC UA control styles, Dashboard execution, and RTDE register access against URSim. See [testing](docs/testing.md) for focused commands and
+discovery, both OPC UA control styles, Dashboard execution, and RTDE-backed status/parameters against URSim. Protocol-only URSim and OpenSSH tests live in the
+[`universal-robots-clients`](https://github.com/CraigBuilds/universal-robots-clients) repository. See [testing](docs/testing.md) for focused commands and
 requirements.
 
 ## Formatting

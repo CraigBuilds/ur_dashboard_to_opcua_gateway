@@ -423,6 +423,8 @@ Each extracted package owns protocol-focused tests:
 - `universal_robots_clients.dashboard_client`: framing, command construction, responses, timeouts, and connection failures.
 - `universal_robots_clients.urp_discovery_*`: backend selection, traversal, filtering, normalization, optional dependencies, and errors.
 - `universal_robots_clients.rtde_client`: recipes, register codecs, handshake transitions, ownership, disconnects, and reconnects.
+- `universal-robots-clients` system tests: real Dashboard and RTDE communication with official URSim plus matching local-filesystem and OpenSSH/SFTP catalogue
+  discovery.
 - `declarative_opcua_server`: flat-interface validation, Python-to-UA types, status polling, parameter writes, method calls, namespaces, lifecycle, failure
   statuses, security defaults, real-client contracts, and clean installation from built distributions.
 

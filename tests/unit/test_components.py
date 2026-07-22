@@ -8,22 +8,11 @@ import xml.etree.ElementTree
 
 import pytest
 import universal_robots_clients.rtde_client as rtde_client
-import universal_robots_clients.urp_discovery_client as urp_discovery_client
 import ur_dashboard_to_opcua_gateway.main as main_module
 import ur_dashboard_to_opcua_gateway.args as parse_command_line_args
 import ur_dashboard_to_opcua_gateway.gateway as compose_gateway
 
 import tests.support.program_fixture as program_fixture
-
-
-def test_local_catalogue(tmp_path: pathlib.Path) -> None:
-    """Select package-backed local discovery and preserve relative paths."""
-    nested = tmp_path / "Production"
-    nested.mkdir()
-    (tmp_path / "Main.urp").touch()
-    (nested / "Pick.URP").touch()
-    (tmp_path / "notes.txt").touch()
-    assert urp_discovery_client.discover_programs("local", tmp_path) == ["Main.urp", "Production/Pick.URP"]
 
 
 def test_local_command_line_args() -> None:

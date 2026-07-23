@@ -43,7 +43,8 @@
 - Create an unstarted server through the independently installable `declarative_opcua_server` package.
 - Read the SFTP password from `UR_ROBOT_PASSWORD` or an interactive prompt.
 - Keep Paramiko in the optional `universal-robots-clients[sftp]` extra and import it only for SFTP connection setup.
-- Own one persistent RTDE connection for the complete gateway lifetime and disconnect it after OPC UA status polling stops.
+- Configure one package-level lazy RTDE endpoint; gateway interfaces use the package operations directly, and the package connects on first use, reuses the
+  session, and closes it at process exit.
 - Keep process startup, `SIGINT`, `SIGTERM`, and shutdown in the main module.
 - Run as an installed command or Docker container.
 

@@ -104,7 +104,8 @@ def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typi
 
             try:
                 refreshed_catalogue = [*expected, "Refreshed.urp"]
-                assert call(methods, namespace, "RefreshPrograms") == refreshed_catalogue
+                assert call(methods, namespace, "RefreshPrograms") == sorted({*expected_method_names, "StartProgram_Refreshed"})
+                assert call(methods, namespace, "ListPrograms") == refreshed_catalogue
                 call(methods, namespace, "StartProgram_Refreshed")
                 lab.ursim.wait_for_program_state("PLAYING")
                 assert "Refreshed.urp" in lab.ursim.command("get loaded program")
@@ -114,7 +115,7 @@ def verify_gateway(lab: robot_lab_module.RobotLab, endpoint: str, expected: typi
                 lab.ursim.command("stop")
                 refreshed_program.unlink(missing_ok=True)
 
-            assert call(methods, namespace, "RefreshPrograms") == expected
+            assert call(methods, namespace, "RefreshPrograms") == sorted(expected_method_names)
             assert {node.read_browse_name().Name for node in methods.get_children()} == expected_method_names | fixed_method_names
             call(methods, namespace, "LoadProgram", "Main.urp")
             assert "Main.urp" in lab.ursim.command("get loaded program")

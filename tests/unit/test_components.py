@@ -36,7 +36,6 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
     """Supply gateway identity and flat callable interfaces to the OPC UA package."""
     args = parse_command_line_args.Args(catalog="local", opcua_endpoint="opc.tcp://127.0.0.1:5000/gateway/")
     server = object()
-    client = rtde_client.Client(unittest.mock.MagicMock(), unittest.mock.MagicMock(), 42, 46)
     captured: typing.Dict[str, object] = {}
 
     def create_server(**configuration: object) -> object:
@@ -46,14 +45,14 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
         return server
 
     monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: ["Main.urp"])
-    connect = unittest.mock.MagicMock(return_value=client)
-    monkeypatch.setattr(compose_gateway.rtde_client, "connect", connect)
+    configure = unittest.mock.MagicMock()
+    monkeypatch.setattr(compose_gateway.rtde_client, "configure", configure)
     monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", create_server)
 
     result = compose_gateway.compose_gateway(args)
 
-    assert result.server is server
-    connect.assert_called_once_with(args.dashboard_host, frequency=10.0)
+    assert result is server
+    configure.assert_called_once_with(args.dashboard_host, frequency=10.0)
     assert set(typing.cast(typing.Dict[str, object], captured["status_interface"])) == {
         "ProgramState",
         "RtdeConnected",
@@ -82,8 +81,11 @@ def test_compose_gateway_supplies_flat_interfaces(monkeypatch: pytest.MonkeyPatc
         "PauseProgram",
         "StopProgram",
         "RefreshPrograms",
-        "StartProgram_Main",
     }
+    refresh = typing.cast(
+        compose_gateway.declarative_opcua_server.MethodRefresh, typing.cast(typing.Dict[str, object], captured["method_interface"])["RefreshPrograms"]
+    )
+    assert set(refresh.provider()) == {"StartProgram_Main"}
     assert captured["endpoint"] == args.opcua_endpoint
     assert captured["namespace"] == compose_gateway.OPC_NAMESPACE
     assert captured["root_object"] == "UR20"
@@ -94,22 +96,21 @@ def test_composed_interfaces_pass_real_declarative_type_validation(monkeypatch: 
     receiver = unittest.mock.MagicMock()
     writer = unittest.mock.MagicMock()
     client = rtde_client.Client(receiver, writer, 42, 46)
-    monkeypatch.setattr(compose_gateway.rtde_client, "connect", lambda *arguments, **keywords: client)
+    monkeypatch.setattr(compose_gateway.rtde_client, "_default_client", client)
+    monkeypatch.setattr(compose_gateway.rtde_client, "configure", lambda *arguments, **keywords: None)
 
-    gateway = compose_gateway.compose_gateway(
+    server = compose_gateway.compose_gateway(
         parse_command_line_args.Args(catalog="local", programs_folder=str(tmp_path), opcua_endpoint="opc.tcp://127.0.0.1:5001/type-validation/")
     )
 
     try:
-        assert gateway.rtde is client
-        assert gateway.server is not None
+        assert server is not None
     finally:
-        gateway.server.tloop.stop()
-        rtde_client.disconnect(client)
+        server.tloop.stop()
 
 
 def test_main_owns_process_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Parse, compose, and run the resource-owning gateway from the executable entry point."""
+    """Parse, compose, and run the plain server from the executable entry point."""
     args = parse_command_line_args.Args(catalog="local")
     server = object()
     started: typing.List[object] = []

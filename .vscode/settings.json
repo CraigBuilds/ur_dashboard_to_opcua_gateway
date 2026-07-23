@@ -1,0 +1,13 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/code/src",
+        "${workspaceFolder}/../declarative-opcua-server/src",
+        "${workspaceFolder}/../universal-robots-clients/src"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "-m",
+        "not system"
+    ]
+}

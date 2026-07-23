@@ -214,8 +214,10 @@ write_input_double_register
 register range is intended for external RTDE clients, with lower registers available explicitly. Unit tests cover configuration, lifecycle, reconnection,
 telemetry, speed, tool I/O, ranges, and typed reads/writes, while the system suite verifies the contract against URSim.
 
-The package owns protocol mechanics. The gateway continues to own OPC UA naming and units, task schemas, register allocation, commit and acknowledgement rules,
-invocation serialization, and execution strategy. Basic speed and gripper controls are implemented; atomic task invocation is not.
+The package owns protocol mechanics plus reusable adapter conveniences: a configured lazy RTDE endpoint, human-facing speed percentages, and configured
+program catalogues with deterministic method generation. The gateway continues to own OPC UA names, task schemas, register allocation, commit and
+acknowledgement rules, invocation serialization, and
+execution strategy. Basic speed and gripper controls are implemented; atomic task invocation is not.
 
 ## Remaining gateway policy
 
@@ -224,20 +226,14 @@ The application still owns meaningful behavior:
 - Parse all product configuration into `Args`.
 - Configure local or SFTP discovery through the package's selector.
 - Bind robot endpoints to reusable functions.
-- Discover programs during composition.
-- Generate deterministic flat `StartProgram_...` names.
-- Bind the reusable load-and-play operation to each generated program method.
 - Add generic list, load, run, pause, and stop methods.
 - Select which getter is published as `ProgramState`.
-- Choose OPC UA names and units for RTDE telemetry.
-- Convert the speed fraction to a percentage and label tool I/O as generic gripper signals.
-- Own the persistent RTDE client for the gateway lifetime.
+- Choose OPC UA names for RTDE telemetry and label tool I/O as generic gripper signals.
 - Supply the `UR20` root, namespace, and endpoint.
 - Own process signals and the complete system test.
 
-RTDE invocation support will add product-specific task schemas, parameter mappings, and resource composition rather than moving those decisions into either
-reusable package. These current policies fit together in `gateway.py`; another application module should be introduced only when a future policy or long-lived
-resource has enough independent behavior to justify its own tests and lifecycle boundary.
+Program-path normalization, speed conversion, configured lazy RTDE lifetime, and live method-refresh mechanics now live in the reusable packages. The remaining
+policy is expressed directly in `gateway.py` as configured callables passed to `create_server()`.
 
 ## Local development and release path
 

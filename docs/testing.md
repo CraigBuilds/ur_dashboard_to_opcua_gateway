@@ -41,20 +41,20 @@ compatible asyncua 2.x line.
 
 The standalone package repositories cover:
 
-- Declarative status polling, scalar and list values, parameter writes, typed method inputs/results, partial signatures, plain-server lifecycle, and
-  flat-interface validation through a real OPC UA client.
+- Declarative status polling, scalar and list values, parameter writes, typed method inputs/results, partial signatures, provider-driven method refresh, stable
+  refreshed NodeIds, plain-server lifecycle, and flat-interface validation through a real OPC UA client.
 - Dashboard line injection, greeting and response framing, endpoint forwarding, and exact named command construction.
 - Local and caller-owned SFTP traversal, backend selection, filtering, normalization, sorting, optional Paramiko setup, and explicit host-key policy.
-- RTDE connection configuration, cleanup, connection health, reconnection, common telemetry, speed control, tool I/O, register ranges, typed reads, typed
-  writes, validation, and rejected writes with deterministic fakes.
+- Lazy and explicit RTDE connection configuration, cleanup, connection health, reconnection, common telemetry, percentage/fraction speed control, tool I/O,
+  register ranges, typed reads, typed writes, validation, and rejected writes with deterministic fakes.
+- Program-method naming, binding, and flattening-collision validation.
 - Their own build, type, format, and wheel-install contracts.
 
 The gateway non-container tests cover:
 
 - Command-line defaults, overrides, credentials, validation, and package delegation.
-- Flat per-program method naming, collision detection, generic discovery/control methods, load-before-play policy, controller methods, RTDE status, and
-  parameter composition.
-- OPC UA application identity forwarding, composition-root wiring, signal handling, and ordered OPC-UA/RTDE shutdown.
+- Generic discovery/control methods, load-before-play policy, controller methods, RTDE status, and parameter composition.
+- OPC UA application identity forwarding, composition-root wiring, signal handling, and plain-server shutdown.
 - Reproducible no-motion URP fixtures and system-test runner argument handling.
 - Module docstrings, parser help, namespace imports, documented public consumers, and dataclass-only production classes.
 

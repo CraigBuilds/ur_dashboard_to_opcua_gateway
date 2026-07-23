@@ -351,11 +351,11 @@ Even after package extraction, the application retains substantial product polic
 - Mapping programs or dispatcher task IDs to schemas.
 - Recovery and idempotency policy.
 - Mapping task schemas into the package's flat status, parameter, and method names.
-- Startup and shutdown of the OPC UA server and persistent robot connections.
+- Startup and shutdown of the OPC UA server; reusable clients own their connection mechanics and process-exit cleanup.
 - End-to-end compatibility tests across released distribution versions.
 
-The target is a concise composition application, not an empty wrapper. Protocol-neutral business rules should remain visible here until they demonstrate value
-as a separate library.
+The target is a concise, configuration-like composition application. Reusable protocol and interface mechanics belong in the two packages; only product naming,
+endpoint selection, and genuine application policy remain visible here.
 
 ## Target package dependency graph
 

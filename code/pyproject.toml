@@ -4,18 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ur_dashboard_to_opcua_gateway"
-version = "1.4.0"
+version = "1.5.0"
 description = "Expose Universal Robots programs and status through OPC UA"
 readme = {text = "ur_dashboard_to_opcua_gateway", content-type = "text/markdown"}
 requires-python = ">=3.8.3"
 dependencies = [
-    "declarative-opcua-server==0.3.0",
-    "universal-robots-clients[rtde]==0.3.0",
+    "declarative-opcua-server==0.4.0",
+    "universal-robots-clients[rtde]==0.4.0",
 ]
 
 [project.optional-dependencies]
 sftp = [
-    "universal-robots-clients[sftp,rtde]==0.3.0",
+    "universal-robots-clients[sftp,rtde]==0.4.0",
 ]
 test = [
     "pytest>=8,<9",
@@ -24,7 +24,7 @@ system-test = [
     "docker>=7,<8; python_version >= '3.10'",
     "pytest>=8,<10; python_version >= '3.10'",
     "testcontainers==4.14.2; python_version >= '3.10'",
-    "universal-robots-clients[sftp,rtde]==0.3.0",
+    "universal-robots-clients[sftp,rtde]==0.4.0",
 ]
 format = [
     "black>=24,<25",

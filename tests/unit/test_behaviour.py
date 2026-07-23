@@ -97,10 +97,9 @@ def test_args_reject_invalid_configuration(catalog: str, robot_host: typing.Opti
 
 
 def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Bind package operations into typed flat interfaces and retain execution order."""
+    """Declare package operations directly as flat OPC UA interfaces."""
     calls: typing.List[typing.Tuple[str, typing.Tuple[object, ...]]] = []
     captured: typing.Dict[str, object] = {}
-    updates: typing.List[typing.Tuple[object, typing.Mapping[str, typing.Callable[..., object]]]] = []
 
     def load(host: str, program: str, port: int, timeout: float) -> str:
         calls.append(("load", (host, program, port, timeout)))
@@ -141,8 +140,9 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     receiver.getDigitalOutState.side_effect = lambda channel: channel == 17
     writer.setSpeedSlider.return_value = True
     writer.setToolDigitalOut.return_value = True
-    connect = unittest.mock.MagicMock(return_value=client)
-    monkeypatch.setattr(compose_gateway.rtde_client, "connect", connect)
+    configure = unittest.mock.MagicMock()
+    monkeypatch.setattr(compose_gateway.rtde_client, "_default_client", client)
+    monkeypatch.setattr(compose_gateway.rtde_client, "configure", configure)
     args = parse_command_line_args.Args(catalog="local", dashboard_host="robot", dashboard_port=30000, rtde_host="rtde", rtde_frequency=20.0)
     discoveries: typing.List[typing.Tuple[object, ...]] = []
 
@@ -163,27 +163,18 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", discover)
     created_server = object()
     monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", lambda **configuration: captured.update(configuration) or created_server)
-    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "update_method_interface", lambda server, interface: updates.append((server, interface)))
 
-    compose_gateway.compose_gateway(args)
+    assert compose_gateway.compose_gateway(args) is created_server
 
     status_interface = typing.cast(typing.Dict[str, typing.Callable[[], object]], captured["status_interface"])
     parameter_interface = typing.cast(typing.Dict[str, typing.Callable[..., None]], captured["parameter_interface"])
-    method_interface = typing.cast(typing.Dict[str, typing.Callable[..., object]], captured["method_interface"])
+    method_interface = typing.cast(typing.Dict[str, object], captured["method_interface"])
     assert set(parameter_interface) == {"MoveSpeedPercent", "GripperOutput0", "GripperOutput1"}
-    assert set(method_interface) == {
-        "ListPrograms",
-        "LoadProgram",
-        "RunProgram",
-        "PauseProgram",
-        "StopProgram",
-        "RefreshPrograms",
-        "StartProgram_Main",
-        "StartProgram_Production_Pick_Part",
-    }
-    assert inspect_signature_parameters(status_interface) == set()
+    assert set(method_interface) == {"ListPrograms", "LoadProgram", "RunProgram", "PauseProgram", "StopProgram", "RefreshPrograms"}
+    assert inspect_required_signature_parameters(status_interface) == set()
     assert inspect_required_signature_parameters(parameter_interface) == {"percent", "value"}
-    assert inspect_required_signature_parameters(method_interface) == {"program"}
+    fixed_methods = typing.cast(typing.Dict[str, typing.Callable[..., object]], {name: method for name, method in method_interface.items() if callable(method)})
+    assert inspect_required_signature_parameters(fixed_methods) == {"program"}
     assert {name: reader() for name, reader in status_interface.items()} == {
         "ProgramState": "STOPPED",
         "RtdeConnected": True,
@@ -207,21 +198,17 @@ def test_gateway_methods_bind_package_operations(monkeypatch: pytest.MonkeyPatch
     parameter_interface["MoveSpeedPercent"](40.0)
     parameter_interface["GripperOutput0"](True)
     parameter_interface["GripperOutput1"](False)
-    assert method_interface["ListPrograms"]() == ["Main.urp", "Production/Pick Part.urp"]
-    assert method_interface["LoadProgram"]("Main.urp") == "loaded"
-    assert method_interface["RunProgram"]() == "played"
-    method_interface["StartProgram_Production_Pick_Part"]()
-    method_interface["PauseProgram"]()
-    method_interface["StopProgram"]()
-    assert method_interface["RefreshPrograms"]() == ["Main.urp", "Production/Pick Part.urp"]
-    assert len(discoveries) == 3
-    assert len(updates) == 1
-    updated_server, updated_interface = updates[0]
-    assert updated_server is created_server
-    assert set(updated_interface) == set(method_interface)
-    assert updated_interface["RefreshPrograms"] is method_interface["RefreshPrograms"]
-    assert updated_interface["StartProgram_Main"] is method_interface["StartProgram_Main"]
-    connect.assert_called_once_with("rtde", frequency=20.0)
+    assert fixed_methods["ListPrograms"]() == ["Main.urp", "Production/Pick Part.urp"]
+    assert fixed_methods["LoadProgram"]("Main.urp") == "loaded"
+    assert fixed_methods["RunProgram"]() == "played"
+    refresh = typing.cast(compose_gateway.declarative_opcua_server.MethodRefresh, method_interface["RefreshPrograms"])
+    generated_methods = refresh.provider()
+    assert set(generated_methods) == {"StartProgram_Main", "StartProgram_Production_Pick_Part"}
+    generated_methods["StartProgram_Production_Pick_Part"]()
+    fixed_methods["PauseProgram"]()
+    fixed_methods["StopProgram"]()
+    assert len(discoveries) == 2
+    configure.assert_called_once_with("rtde", frequency=20.0)
     writer.setSpeedSlider.assert_called_once_with(0.4)
     assert writer.setToolDigitalOut.call_args_list == [unittest.mock.call(0, True), unittest.mock.call(1, False)]
     assert calls == [
@@ -252,59 +239,6 @@ def inspect_required_signature_parameters(interface: typing.Mapping[str, typing.
         for name, parameter in inspect.signature(function).parameters.items()
         if parameter.default is inspect.Parameter.empty
     }
-
-
-def test_program_method_name_collisions_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Reject distinct program paths that flatten to the same OPC UA method name."""
-    args = parse_command_line_args.Args(catalog="local")
-    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: ["Pick-Part.urp", "Pick Part.urp"])
-    connect = unittest.mock.MagicMock()
-    monkeypatch.setattr(compose_gateway.rtde_client, "connect", connect)
-
-    with pytest.raises(ValueError, match="duplicate"):
-        compose_gateway.compose_gateway(args)
-
-    connect.assert_not_called()
-
-
-def test_gateway_closes_rtde_after_server_and_on_start_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Own the persistent RTDE connection across normal and failed OPC UA lifecycles."""
-    client = unittest.mock.MagicMock()
-    server = unittest.mock.MagicMock()
-    gateway = compose_gateway._Gateway(server, client)
-    disconnect = unittest.mock.MagicMock()
-    monkeypatch.setattr(compose_gateway.rtde_client, "disconnect", disconnect)
-
-    with gateway as entered:
-        assert entered is gateway
-        disconnect.assert_not_called()
-
-    server.__enter__.assert_called_once_with()
-    server.__exit__.assert_called_once_with(None, None, None)
-    disconnect.assert_called_once_with(client)
-
-    disconnect.reset_mock()
-    server.__enter__.side_effect = RuntimeError("port unavailable")
-
-    with pytest.raises(RuntimeError, match="port unavailable"):
-        gateway.__enter__()
-
-    disconnect.assert_called_once_with(client)
-
-
-def test_failed_server_composition_closes_rtde(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Avoid leaking RTDE when declarative OPC UA validation or setup fails."""
-    client = unittest.mock.MagicMock()
-    disconnect = unittest.mock.MagicMock()
-    monkeypatch.setattr(compose_gateway.urp_discovery_client, "discover_programs", lambda *arguments, **keywords: [])
-    monkeypatch.setattr(compose_gateway.rtde_client, "connect", lambda *arguments, **keywords: client)
-    monkeypatch.setattr(compose_gateway.rtde_client, "disconnect", disconnect)
-    monkeypatch.setattr(compose_gateway.declarative_opcua_server, "create_server", unittest.mock.MagicMock(side_effect=RuntimeError("invalid interface")))
-
-    with pytest.raises(RuntimeError, match="invalid interface"):
-        compose_gateway.compose_gateway(parse_command_line_args.Args(catalog="local"))
-
-    disconnect.assert_called_once_with(client)
 
 
 def test_run_until_stopped_installs_handlers_and_closes_server(monkeypatch: pytest.MonkeyPatch) -> None:

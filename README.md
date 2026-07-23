@@ -54,9 +54,9 @@ Objects/
 ```
 
 The generic methods support discovery and low-level lifecycle control, while each generated `StartProgram_...()` method provides a convenient load-then-run
-operation. `RefreshPrograms()` rediscovers the configured local or SFTP folder, returns the new sorted catalogue, and makes the generated method nodes match it
-without restarting the gateway. Status variables are read-only and continuously polled. Parameter variables are writable commands: a write is sent to the robot
-before the OPC UA value is retained.
+operation. `RefreshPrograms()` rediscovers the configured local or SFTP folder, makes the generated method nodes match it without restarting the gateway, and
+returns their sorted `StartProgram_...` names. `ListPrograms()` returns the underlying sorted catalogue. Status variables are read-only and continuously polled.
+Parameter variables are writable commands: a write is sent to the robot before the OPC UA value is retained.
 
 ### Status values and units
 
@@ -118,12 +118,23 @@ Install the gateway and its runtime dependencies from PyPI in one command:
 python -m pip install -e "./code[sftp]"
 ```
 
-For local gateway development, install the gateway with its test and quality extras. The released `declarative-opcua-server==0.3.0` and
-`universal-robots-clients==0.3.0` dependencies resolve from PyPI:
+After `declarative-opcua-server==0.4.0` and `universal-robots-clients==0.4.0` are released, install the gateway with its test and quality extras and let pip
+resolve them from PyPI:
 
 ```bash
 python -m pip install -e "./code[sftp,test,format,type-check]"
 ```
+
+When developing all three adjacent checkouts before release, create `.venv` in this repository and install each source tree as editable:
+
+```bash
+python -m venv .venv
+.venv/Scripts/python -m pip install --upgrade pip
+.venv/Scripts/python -m pip install -e "../declarative-opcua-server[dev]" -e "../universal-robots-clients[dev]" -e "./code[sftp,test,format,type-check]"
+```
+
+The checked-in VS Code settings select this environment and add all three `src` directories to analysis. The multi-root
+`ur-program-opcua-gateway.code-workspace` file in the parent workspace opens the three repositories together.
 
 Python 3.8.3 or later is supported. `declarative-opcua-server` selects the compatible `asyncua` 1.x line, starting at 1.1.5, on Python 3.8 and 3.9 and the 2.x
 line, starting at 2.0.1, on Python 3.10 and later. Paramiko belongs to the optional `universal-robots-clients[sftp]` extra and is imported only for SFTP

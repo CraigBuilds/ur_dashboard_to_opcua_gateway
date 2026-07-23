@@ -102,23 +102,21 @@ namespaces so their owner remains visible at each call site.
 main.main()
     -> args.parse_args()
     -> gateway.compose_gateway(args)
-        -> universal_robots_clients.urp_discovery_client.discover_programs(...)
-        -> universal_robots_clients.rtde_client.connect(...)
-        -> build Dashboard methods plus RTDE status and parameter callables
+        -> configure one program catalogue and the package-level lazy RTDE endpoint
+        -> declare Dashboard methods plus RTDE status and parameter callables
         -> declarative_opcua_server.create_server(...)
-        -> wrap the server and RTDE client in one gateway lifetime
-    -> main._run_until_stopped(gateway)
+    -> main._run_until_stopped(server)
 ```
 
-Discovery runs during composition to generate a flat `StartProgram_...` method for each program. `RefreshPrograms` repeats discovery and passes the complete
-desired mapping to `declarative_opcua_server.update_method_interface()`, which changes the live `Methods` folder without restarting the server. Unchanged
-programs preserve their callbacks and nodes. The root also exposes dynamic `ListPrograms`, `LoadProgram(program)`, `RunProgram`, `PauseProgram`, and
-`StopProgram` methods. A generated start method binds the reusable Dashboard `load_and_play_program()` operation, while the generic methods let a client perform
-those steps separately. `ProgramState` uses the reusable Dashboard getter. The remaining status callbacks read RTDE telemetry, and parameter callbacks set the
-speed slider or tool outputs. The declarative server infers OPC UA types from those functions' annotations, polls status, and validates writes.
+The UR package owns program-path normalization, generated start callables, and flattening-collision checks. `RefreshPrograms` is a declarative refresh entry:
+the OPC UA package invokes its provider and changes the live `Methods` folder without restarting the server. The root also exposes `ListPrograms`,
+`LoadProgram(program)`, `RunProgram`, `PauseProgram`, and `StopProgram`. A generated start method binds the reusable Dashboard `load_and_play_program()`
+operation, while the generic methods let a client perform those steps separately.
 
-The main module enters the composed gateway context and waits for `SIGINT` or `SIGTERM`. The wrapper starts/stops asyncua first and disconnects RTDE last, which
-prevents the status thread from polling a closed RTDE client. A failed server construction or startup also closes RTDE.
+The UR package also owns one configured lazy RTDE session. Composition records its host but does not connect; the first polled status or parameter write opens
+it, later operations reuse it, and package-level process-exit cleanup closes it. `ProgramState` uses the reusable Dashboard getter. The remaining status
+callbacks read RTDE telemetry, and parameter callbacks set the speed slider or tool outputs. The declarative server infers OPC UA types from those functions'
+annotations, polls status, and validates writes. The main module only enters the returned plain server and waits for `SIGINT` or `SIGTERM`.
 
 ## Public gateway API
 
@@ -135,8 +133,7 @@ gateway
     compose_gateway
 ```
 
-`Args` is the public configuration data class. The private `_Gateway` data class only couples resource lifetimes. Other helpers begin with an underscore because
-they implement composition details rather than APIs for other modules.
+`Args` is the public configuration data class. `compose_gateway()` returns the plain server produced by `declarative_opcua_server.create_server()`.
 
 ## Repository layout
 

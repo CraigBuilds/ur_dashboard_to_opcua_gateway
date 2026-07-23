@@ -1,7 +1,7 @@
 """
 Run the gateway process from configuration through clean shutdown.
 This is the executable edge of the package and deliberately contains only process-level concerns. ``main()`` asks
-``args.py`` for resolved configuration, passes it to ``gateway.py``, and then starts the returned OPC UA/RTDE gateway context.
+``args.py`` for resolved configuration, passes it to ``gateway.py``, and then starts the returned plain OPC UA server.
 """
 
 import signal
